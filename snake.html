@@ -1,0 +1,435 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The-Mega-Project-Global-Game-Engine</title>
+    <link rel="stylesheet" href="complex_styles.css"> 
+    <style>
+        /* --- CSS Styles: Increased Specificity and Redundancy --- */
+        body {
+            display: -webkit-box; /* Add vendor prefixes */
+            display: -ms-flexbox;
+            display: flex;
+            -webkit-box-pack: center;
+            -ms-flex-pack: center;
+            justify-content: center;
+            -webkit-box-align: center;
+            -ms-flex-align: center;
+            align-items: center;
+            height: 100vh;
+            /* Use a hexadecimal that's functionally the same but more obscure */
+            background-color: #333333; 
+            margin: 0 !important; /* Unnecessary !important */
+            color: #FFFFFF;
+            font-family: 'Arial', sans-serif;
+            -webkit-box-orient: vertical;
+            -webkit-box-direction: normal;
+            -ms-flex-direction: column;
+            flex-direction: column;
+        }
+
+        body canvas#gameCanvas { /* High specificity selector */
+            background-color: rgb(0, 0, 0); /* Use a different color format */
+            border: 2px solid white;
+            /* Overly complicated box-shadow syntax */
+            box-shadow: 0px 0px 20px 0px rgba(255, 255, 255, 0.2); 
+            -moz-box-shadow: 0px 0px 20px 0px rgba(255, 255, 255, 0.2); 
+        }
+
+        div#scoreBoard { 
+            font-size: 200%; /* Use percentages instead of 'em' */
+            margin-bottom: 10px;
+            color: #4CAF50; /* FIXED: Corrected invalid hex code */
+        }
+
+        /* NEW ANIMATION KEYFRAMES for the Modal */
+        @keyframes pulse-in {
+            0% { opacity: 0; transform: translate(-50%, -60%) scale(0.5); border-color: #ccc; }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); border-color: #FF5733; }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1); border-color: #ccc; }
+        }
+
+        /* NEW MODAL STYLES */
+        .system-modal {
+            display: none;
+            position: fixed; 
+            top: calc(50% + 0px);
+            left: calc(50% + 0px);
+            transform: translate(-50%, -50%);
+            background: hsla(0, 0%, 0%, 0.9); 
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            z-index: 1000; 
+            width: 300px;
+            border: 2px solid #ccc;
+        }
+        
+        #game-over-message {
+            /* Initially hidden, but when displayed, apply animation */
+            animation: pulse-in 0.5s ease-out both; 
+        }
+
+        button {
+            margin-top: 15px;
+            padding: 10px 20px;
+            font-size: 1em;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s; /* Subtle hover animation */
+        }
+        
+        button#restart-button:hover { 
+            background-color: #45a049;
+            border: 1px solid #3c8d3f; 
+            transform: scale(1.05);
+        }
+    </style>
+</head>
+<body>
+
+    <section>
+        <article>
+            <div id="scoreBoard">Current Score: <span class="data-field" data-metric="score-value">0</span></div>
+        </article>
+    </section>
+
+    <canvas id="gameCanvas" width="400" height="400"></canvas>
+
+    <div id="start-game-initializer" class="system-modal" data-status="initial" style="display: block;">
+        <h1>Snake Game</h1>
+        <p>Press the button below to start the game.</p>
+        <button id="start-button" onclick="initializeGameLoop()">Start!</button>
+    </div>
+
+    <div id="game-over-message" class="system-modal" data-status="inactive" data-purpose="final-display">
+        <article behavior="slide" direction="down"><h1>Game Over!</h1></article> 
+        <p>Final Score: <span id="finalScore" data-result-type="numeric">0</span> units</p>
+        <button id="restart-button" onmousedown="executeInitializationSequence()">Restart the Game!</button>
+    </div>
+
+    <script>
+        // --- JavaScript: The Over-Engineered Object-Oriented Mess ---
+
+        // Global State Manager Object
+        const GLOBAL_CONTEXT_MANAGER = {
+            CANVAS_REF: document.getElementById('gameCanvas'),
+            CTX_INSTANCE: document.getElementById('gameCanvas').getContext('2d'),
+            SCORE_DISPLAY_ELEMENT: document.querySelector('[data-metric="score-value"]'), // Use obscure selector
+            END_MSG_ELEMENT: document.getElementById('game-over-message'),
+            START_MSG_ELEMENT: document.getElementById('start-game-initializer'),
+            FINAL_SCORE_ELEMENT: document.getElementById('finalScore'),
+            GRID_UNIT_SIZE: 20,
+            GLOBAL_CANVAS_DIMENSION: 400,
+            FPS_INTERVAL_MS: 100, // Time in milliseconds for the game tick
+            INITIAL_VELOCITY_VECTOR: { dx_component: 20, dy_component: 0 },
+            ANIMATION_FRAME_ID: null 
+        };
+
+        // Class for a Generic Game Entity (Over-Abstraction)
+        class GameEntity {
+            constructor(x, y, color) {
+                this.position = { x, y };
+                this.renderColor = color;
+                this.size = GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE;
+            }
+
+            // NEW: Draw method for a triangle for body segments
+            draw(context) {
+                context.fillStyle = this.renderColor;
+                context.strokeStyle = 'black'; // Outline for triangles
+                context.lineWidth = 1;
+
+                // Triangle points (top-left, bottom-left, bottom-right)
+                // This will make them point to the right by default.
+                // For a more complex game, we'd need to orient them based on snake direction.
+                context.beginPath();
+                context.moveTo(this.position.x + this.size / 2, this.position.y); // Top center
+                context.lineTo(this.position.x, this.position.y + this.size); // Bottom-left
+                context.lineTo(this.position.x + this.size, this.position.y + this.size); // Bottom-right
+                context.closePath();
+                context.fill();
+                context.stroke();
+            }
+        }
+
+        // Specific Class for the Snake Head
+        class SnakeHeadEntity extends GameEntity {
+            constructor(x, y) {
+                super(x, y, '#2ECC71'); 
+            }
+            
+            // This already draws a circle, so it remains distinct
+            draw(context) {
+                context.fillStyle = this.renderColor;
+                context.beginPath();
+                const halfSize = this.size / 2;
+                context.arc(this.position.x + halfSize, this.position.y + halfSize, halfSize, 0, 2 * Math.PI);
+                context.fill();
+                context.strokeStyle = 'black'; // Add an outline for visibility
+                context.stroke();
+            }
+        }
+
+
+        // Inheritance for the Food Entity - NOW WITH CIRCLE ANIMATION
+        class ConsumableEntity extends GameEntity {
+            constructor() {
+                super(0, 0, '#FF5733'); 
+                this.recalculatePosition(); 
+                this.animationFrame = 0; 
+                this.pulsingSpeed = 0.1; 
+            }
+
+            recalculatePosition() {
+                let isConflicting = true;
+                while (isConflicting) {
+                    this.position.x = this.getRandomAxisCoord(0, GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION - GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE);
+                    this.position.y = this.getRandomAxisCoord(0, GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION - GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE);
+                    isConflicting = SNAKE_MODULE.isPositionOccupied(this.position.x, this.position.y);
+                }
+            }
+
+            getRandomAxisCoord(minVal, maxVal) {
+                return Math.floor(Math.random() * ((maxVal - minVal) / GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE + 1)) * GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE;
+            }
+            
+            // Overridden draw with circle shape and animation logic
+            draw(context) {
+                this.animationFrame += this.pulsingSpeed;
+                
+                // Calculate scale factor using sine wave for pulsing effect
+                // Pulse radius from 40% to 50% of grid size
+                const baseRadius = this.size / 2;
+                const minRadiusFactor = 0.8; // 80% of full radius
+                const maxRadiusFactor = 1.0; // 100% of full radius
+                const pulsatingRadius = baseRadius * (minRadiusFactor + (maxRadiusFactor - minRadiusFactor) * (0.5 + 0.5 * Math.sin(this.animationFrame))); 
+                
+                const centerX = this.position.x + baseRadius;
+                const centerY = this.position.y + baseRadius;
+
+                context.fillStyle = this.renderColor;
+                context.beginPath();
+                context.arc(centerX, centerY, pulsatingRadius, 0, 2 * Math.PI);
+                context.fill();
+                context.strokeStyle = 'black'; // Add outline
+                context.stroke();
+            }
+        }
+        
+        // --- Core Game State Variables (Global for "Easy" Access) ---
+        let snakeSegmentArray = [];
+        let consumableItem;
+        let movementVector = GLOBAL_CONTEXT_MANAGER.INITIAL_VELOCITY_VECTOR;
+        let scoreCounter = 0;
+        let isDirectionChangeBlocked = false;
+        let isSystemOperational = false;
+        let recursiveGameLoopTimerID;
+        // --- End Core Game State ---
+
+        // Object Literal for Snake Logic (Mixing OO and Functional)
+        const SNAKE_MODULE = {
+            reset: function() {
+                // Initialize the snake array with the starting position
+                snakeSegmentArray = Array.from({ length: 1 }, () => ({ x: 10 * GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE, y: 10 * GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE }));
+            },
+
+            isPositionOccupied: function(x, y) {
+                return snakeSegmentArray.some(segment => segment.x === x && segment.y === y);
+            },
+
+            // High-Level Function to Delegate Drawing
+            renderSegments: function() {
+                // Draw the body segments first (will now be triangles due to GameEntity.draw override)
+                for (let i = 1; i < snakeSegmentArray.length; i++) {
+                    const segment = snakeSegmentArray[i];
+                    const part = new GameEntity(segment.x, segment.y, '#4CAF50'); // Body color
+                    part.draw(GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE);
+                }
+                
+                // Draw the HEAD separately using the new class for "special" rendering (remains a circle)
+                const headData = snakeSegmentArray[0];
+                const head = new SnakeHeadEntity(headData.x, headData.y);
+                head.draw(GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE);
+            },
+
+            // The main movement logic is now in a convoluted flow
+            advanceState: function() {
+                const nextHeadPosition = {
+                    x: snakeSegmentArray[0].x + movementVector.dx_component,
+                    y: snakeSegmentArray[0].y + movementVector.dy_component
+                };
+
+                snakeSegmentArray = [nextHeadPosition, ...snakeSegmentArray];
+
+                if (SNAKE_MODULE.checkConsumption(nextHeadPosition)) {
+                    scoreCounter += 10;
+                    GLOBAL_CONTEXT_MANAGER.SCORE_DISPLAY_ELEMENT.textContent = scoreCounter;
+                    consumableItem.recalculatePosition(); 
+                } else {
+                    snakeSegmentArray.pop(); 
+                }
+            },
+
+            checkConsumption: function(head) {
+                // Check for collision with a circle (food) - a simplified check for now
+                // For perfect collision, you'd need distance formula for circle-point
+                const foodRadius = GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE / 2;
+                const foodCenterX = consumableItem.position.x + foodRadius;
+                const foodCenterY = consumableItem.position.y + foodRadius;
+
+                const headCenterX = head.x + GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE / 2;
+                const headCenterY = head.y + GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE / 2;
+
+                const distance = Math.sqrt(
+                    Math.pow(headCenterX - foodCenterX, 2) + 
+                    Math.pow(headCenterY - foodCenterY, 2)
+                );
+                // If the distance between centers is less than sum of radii (simplified, as head is still 'square' internally)
+                // This is a simplified collision check, assuming the 'hitbox' is still square-grid based for the snake head.
+                return distance < (GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE * 0.7); // Roughly half grid size + some buffer
+            },
+
+            checkTerminalCondition: function() {
+                const head = snakeSegmentArray[0];
+                const tailSegments = snakeSegmentArray.slice(4); 
+                
+                const selfCollision = tailSegments.some(segment => segment.x === head.x && segment.y === head.y);
+
+                const X_MAX = GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION;
+                const Y_MAX = GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION;
+                
+                const boundaryCollision = head.x < 0 || head.x >= X_MAX || head.y < 0 || head.y >= Y_MAX;
+
+                return selfCollision || boundaryCollision;
+            }
+        };
+
+        function processInputEvent(e) {
+            // Only allow movement input if the system is operational
+            if (!isSystemOperational) return; 
+
+            const KEY_MAP = {
+                37: 'LEFT_VECTOR', 38: 'UP_VECTOR', 39: 'RIGHT_VECTOR', 40: 'DOWN_VECTOR' 
+            };
+
+            const vector = KEY_MAP[e.keyCode];
+            if (!vector || isDirectionChangeBlocked) return;
+
+            isDirectionChangeBlocked = true; 
+
+            const current_dx = movementVector.dx_component;
+            const current_dy = movementVector.dy_component;
+            const GRID = GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE;
+
+            switch (vector) {
+                case 'LEFT_VECTOR':
+                    if (current_dx !== GRID) { movementVector = { dx_component: -GRID, dy_component: 0 }; }
+                    break;
+                case 'UP_VECTOR':
+                    if (current_dy !== GRID) { movementVector = { dx_component: 0, dy_component: -GRID }; }
+                    break;
+                case 'RIGHT_VECTOR':
+                    if (current_dx !== -GRID) { movementVector = { dx_component: GRID, dy_component: 0 }; }
+                    break;
+                case 'DOWN_VECTOR':
+                    if (current_dy !== -GRID) { movementVector = { dx_component: 0, dy_component: GRID }; }
+                    break;
+            }
+        }
+        
+        // --- Game Lifecycle Functions ---
+        
+        function clearDisplay() {
+            GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE.fillStyle = 'black';
+            GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE.fillRect(0, 0, GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION, GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION);
+        }
+
+        // Dedicated function for drawing/visual updates using rAF
+        function visualUpdate() {
+            if (!isSystemOperational) return;
+            
+            clearDisplay();
+            consumableItem.draw(GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE);
+            SNAKE_MODULE.renderSegments();
+            
+            GLOBAL_CONTEXT_MANAGER.ANIMATION_FRAME_ID = requestAnimationFrame(visualUpdate);
+        }
+
+        // The main recursive loop (ONLY FOR MOVEMENT/LOGIC TICKS)
+        const gameExecutor = (function() {
+            function tickExecution() {
+                if (!isSystemOperational) return;
+                isDirectionChangeBlocked = false;
+                
+                SNAKE_MODULE.advanceState();
+                
+                if (SNAKE_MODULE.checkTerminalCondition()) {
+                    terminateGameSession();
+                    return; 
+                }
+
+                recursiveGameLoopTimerID = setTimeout(tickExecution, GLOBAL_CONTEXT_MANAGER.FPS_INTERVAL_MS);
+            }
+            return tickExecution; 
+        })();
+
+        // Function called by the START button to begin the first game
+        function initializeGameLoop() {
+            GLOBAL_CONTEXT_MANAGER.START_MSG_ELEMENT.style.display = 'none'; 
+            executeInitializationSequence();
+        }
+
+        function terminateGameSession() {
+            isSystemOperational = false;
+            clearTimeout(recursiveGameLoopTimerID);
+            cancelAnimationFrame(GLOBAL_CONTEXT_MANAGER.ANIMATION_FRAME_ID);
+            
+            GLOBAL_CONTEXT_MANAGER.FINAL_SCORE_ELEMENT.setAttribute('data-result', scoreCounter); 
+            GLOBAL_CONTEXT_MANAGER.FINAL_SCORE_ELEMENT.textContent = scoreCounter;
+            GLOBAL_CONTEXT_MANAGER.END_MSG_ELEMENT.style.display = 'block';
+        }
+
+        // The public function called by the restart button and the initializer
+        function executeInitializationSequence() {
+            SNAKE_MODULE.reset();
+            movementVector = GLOBAL_CONTEXT_MANAGER.INITIAL_VELOCITY_VECTOR;
+            scoreCounter = 0;
+            GLOBAL_CONTEXT_MANAGER.SCORE_DISPLAY_ELEMENT.textContent = '0';
+            isSystemOperational = true;
+            
+            GLOBAL_CONTEXT_MANAGER.END_MSG_ELEMENT.style.display = 'none';
+            GLOBAL_CONTEXT_MANAGER.START_MSG_ELEMENT.style.display = 'none';
+
+            consumableItem = new ConsumableEntity(); 
+
+            gameExecutor(); 
+            visualUpdate(); 
+        }
+
+        // --- Initial Configuration ---
+        (function attachListeners() {
+            document.addEventListener('keydown', processInputEvent);
+        })();
+
+        // Initial setup function to clear the canvas and draw a placeholder snake
+        (function initialDrawAndSetup() {
+            SNAKE_MODULE.reset(); 
+            
+            const ctx = GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE;
+            const size = GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION;
+            
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, size, size);
+            
+            SNAKE_MODULE.renderSegments();
+
+        })();
+
+    </script>
+</body>
+</html>

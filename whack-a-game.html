@@ -1,0 +1,524 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Whack-A-Gem</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    },
+                    colors: {
+                        'primary': '#4f46e5',
+                        'secondary': '#f97316',
+                        'dark-bg': '#1f2937',
+                        'hole-border': '#374151',
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom CSS for Game Board and Animation */
+        body {
+            background-color: #111827; /* Deep dark background */
+        }
+        .hole {
+            overflow: hidden;
+            background: linear-gradient(to top, #374151, #4b5563);
+            border-radius: 50%; /* Circular holes */
+            box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5), 0 5px 10px rgba(0, 0, 0, 0.5);
+            position: relative;
+            cursor: pointer;
+            transition: transform 0.1s ease-out;
+        }
+
+        .hole:active {
+            transform: scale(0.98); /* Slight press effect on click */
+        }
+
+        .gem {
+            position: absolute;
+            bottom: -100%; /* Start hidden below the hole */
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            height: 80%;
+            transition: bottom 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Springy animation */
+            pointer-events: none; /* Initially non-clickable */
+            user-select: none;
+            cursor: pointer;
+        }
+
+        .hole.up .gem {
+            bottom: 5%; /* Pops up */
+            pointer-events: auto; /* Becomes clickable when up */
+            transform: translateX(-50%) scale(1.05);
+        }
+
+        /* SVG Gem Styling */
+        .gem svg {
+            filter: drop-shadow(0 0 8px rgba(249, 115, 22, 0.8));
+            transition: transform 0.1s ease-in-out;
+        }
+        
+        /* Animation on hit */
+        .gem.hit svg {
+            transform: scale(0.8) rotate(15deg);
+            filter: drop-shadow(0 0 5px rgba(255, 255, 255, 0.8));
+        }
+
+    </style>
+</head>
+<body class="font-sans min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="w-full max-w-lg bg-dark-bg p-6 rounded-xl shadow-2xl border-b-4 border-primary/50">
+        <!-- User ID Display (MANDATORY for multi-user apps) -->
+        <p class="text-xs text-right text-gray-400 mb-2">User ID: <span id="user-id-display">Initializing...</span></p>
+
+        <!-- Header and Scoreboard -->
+        <header class="text-center mb-6">
+            <h1 class="text-4xl font-extrabold text-white mb-2">WHACK-A-GEM</h1>
+            <p id="status-message" class="text-lg text-secondary font-medium">Initializing game...</p>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="flex justify-between items-center bg-gray-700 p-3 rounded-lg mb-6 shadow-inner">
+            <div class="text-center">
+                <p class="text-sm font-semibold text-gray-300">SCORE</p>
+                <p id="score-display" class="text-3xl font-bold text-green-400">0</p>
+            </div>
+            <div class="text-center">
+                <p class="text-sm font-semibold text-gray-300">TIME LEFT</p>
+                <p id="time-display" class="text-3xl font-bold text-red-400">30s</p>
+            </div>
+        </div>
+
+        <!-- Game Board -->
+        <div id="game-board" class="grid grid-cols-3 gap-4 md:gap-6 aspect-square p-2 bg-gray-800 rounded-xl shadow-lg border border-gray-700">
+            <!-- Holes will be dynamically generated/setup here -->
+        </div>
+
+        <!-- Controls -->
+        <div class="mt-6 flex justify-center space-x-4">
+            <button id="start-button" class="w-1/2 px-8 py-3 bg-primary hover:bg-indigo-600 text-white font-bold rounded-lg shadow-xl transition duration-150 ease-in-out transform hover:scale-105 active:scale-100 disabled:opacity-50" disabled>
+                Start Game
+            </button>
+            <!-- Secondary Actions -->
+            <div class="flex space-x-4 w-1/2">
+                <!-- MODIFIED: Changed button to <a> tag for navigation -->
+                <a href="home.html" id="home-button" class="flex-1 px-3 py-3 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg shadow-xl transition duration-150 ease-in-out transform hover:scale-105 active:scale-100 flex items-center justify-center">
+                    <!-- Home Icon (Lucide-like SVG) -->
+                    <svg xmlns="http://www.w3.org/2000/svg" class="w-6 h-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
+                </a>
+                <button id="scores-button" class="flex-1 px-3 py-3 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg shadow-xl transition duration-150 ease-in-out transform hover:scale-105 active:scale-100">
+                    Scores
+                </button>
+            </div>
+        </div>
+
+        <!-- End Game Modal (Hidden by default) -->
+        <div id="message-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div class="bg-dark-bg p-8 rounded-xl shadow-2xl max-w-sm w-full text-center border-t-4 border-secondary">
+                <h3 id="modal-title" class="text-3xl font-extrabold text-secondary mb-4">Time's Up!</h3>
+                <p class="text-xl text-white mb-6">Final Score: <span id="modal-score" class="font-bold text-green-400">0</span></p>
+                <div class="flex flex-col space-y-3">
+                    <button id="modal-play-again" class="px-6 py-2 bg-primary hover:bg-indigo-600 text-white font-semibold rounded-lg transition">
+                        Play Again
+                    </button>
+                    <button id="modal-view-scores" class="px-6 py-2 bg-gray-600 hover:bg-gray-500 text-white font-semibold rounded-lg transition">
+                        View Scores
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- High Scores Modal (New) -->
+        <div id="scores-modal" class="hidden fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            <div class="bg-dark-bg p-8 rounded-xl shadow-2xl max-w-lg w-full text-center border-t-4 border-primary">
+                <h3 class="text-3xl font-extrabold text-primary mb-6">Top Whackers</h3>
+                <div id="scores-list" class="space-y-2 mb-6 text-left">
+                    <p class="text-white text-center">Loading scores...</p>
+                </div>
+                <button id="scores-close-button" class="px-6 py-2 bg-secondary hover:bg-orange-600 text-white font-semibold rounded-lg transition">
+                    Close
+                </button>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- Script moved to the end of the body for guaranteed DOM loading -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, doc, addDoc, onSnapshot, collection, query, limit, orderBy } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+        // --- Global Variables (Firebase and Game State) ---
+        setLogLevel('Debug');
+        let db, auth, userId = 'guest';
+        let isAuthReady = false;
+        let isFirebaseEnabled = false; // Flag to track successful Firebase initialization
+
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+        // Game State
+        let score = 0;
+        const timeLimit = 30; // seconds
+        let timeLeft = timeLimit;
+        let lastHole;
+        let timer;
+        let popUpTimer;
+        let gameActive = false;
+
+        // --- DOM References (Assigned inside DOMContentLoaded) ---
+        let board, scoreDisplay, timeDisplay, startButton, homeButton, scoresButton, statusMessage;
+        let messageModal, modalScore, modalPlayAgainButton, modalViewScoresButton;
+        let scoresModal, scoresList, scoresCloseButton;
+
+
+        // --- Firebase Functions ---
+
+        async function saveScore(finalScore) {
+            if (!isFirebaseEnabled || !isAuthReady || finalScore === 0) return;
+            try {
+                const scoresCollectionRef = collection(db, `artifacts/${appId}/public/data/gem_scores`);
+                await addDoc(scoresCollectionRef, {
+                    score: finalScore,
+                    timestamp: Date.now(),
+                    userId: userId,
+                });
+                console.log("Score successfully saved:", finalScore);
+            } catch (e) {
+                console.error("Error saving score:", e);
+            }
+        }
+
+        function fetchAndDisplayScores() {
+            if (!isFirebaseEnabled || !isAuthReady) {
+                scoresList.innerHTML = '<p class="text-red-400 text-center">Scores are disabled in Local Mode.</p>';
+                return;
+            }
+            
+            scoresList.innerHTML = '<p class="text-white text-center">Loading top scores...</p>';
+            
+            try {
+                const scoresCollectionRef = collection(db, `artifacts/${appId}/public/data/gem_scores`);
+                const q = query(scoresCollectionRef, orderBy("score", "desc"), limit(10));
+
+                onSnapshot(q, (snapshot) => {
+                    if (!snapshot.empty) {
+                        const scores = [];
+                        snapshot.forEach(doc => {
+                            scores.push({ id: doc.id, ...doc.data() });
+                        });
+
+                        scores.sort((a, b) => {
+                            if (a.score === b.score) {
+                                return b.timestamp - a.timestamp; 
+                            }
+                            return b.score - a.score;
+                        });
+                        
+                        scoresList.innerHTML = scores.map((s, index) => {
+                            const userDisplay = s.userId.substring(0, 8);
+                            const rank = index + 1;
+                            const isCurrentUser = s.userId === userId;
+
+                            return `
+                                <div class="flex justify-between items-center p-3 rounded-lg ${isCurrentUser ? 'bg-primary/20 border border-primary' : 'bg-gray-700/50'}">
+                                    <span class="font-bold text-xl ${rank <= 3 ? 'text-secondary' : 'text-gray-300'}">${rank}.</span>
+                                    <span class="text-lg text-white font-medium flex-1 text-center">${s.score} Points</span>
+                                    <span class="text-sm text-gray-400">${isCurrentUser ? 'You' : userDisplay}</span>
+                                </div>
+                            `;
+                        }).join('');
+                    } else {
+                        scoresList.innerHTML = '<p class="text-gray-400 text-center">No scores recorded yet!</p>';
+                    }
+                }, (error) => {
+                    console.error("Error fetching scores:", error);
+                    scoresList.innerHTML = '<p class="text-red-400 text-center">Failed to load scores.</p>';
+                });
+
+            } catch (e) {
+                console.error("Firestore query setup error:", e);
+                scoresList.innerHTML = '<p class="text-red-400 text-center">Failed to access score data.</p>';
+            }
+        }
+
+        // --- Firebase Initialization Handler ---
+
+        function initializeFirebase() {
+            try {
+                let config = {};
+                const injectedToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                
+                // 1. Safely retrieve the config
+                let hasValidConfig = false;
+                try {
+                    config = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+                    // Check if a critical piece of config is present (only happens in the Canvas environment)
+                    if (config && config.projectId) {
+                        hasValidConfig = true;
+                    }
+                } catch(e) { /* Config parsing failed, likely empty string. */ }
+                
+                // 2. Only initialize if config looks valid (i.e., we are in the Canvas environment)
+                if (hasValidConfig) {
+                    const app = initializeApp(config);
+                    db = getFirestore(app);
+                    auth = getAuth(app);
+                    isFirebaseEnabled = true;
+
+                    // 3. Handle Auth State Change
+                    onAuthStateChanged(auth, (user) => {
+                        if (user) { userId = user.uid; } else { userId = crypto.randomUUID(); }
+                        const userIdDisplay = document.getElementById('user-id-display');
+                        if (userIdDisplay) userIdDisplay.textContent = userId.substring(0, 8) + '...';
+                        isAuthReady = true;
+                        
+                        // Update UI status after successful auth
+                        if (statusMessage) statusMessage.textContent = 'Ready to play! Click Start.';
+                        if (startButton) startButton.disabled = false;
+                    });
+
+                    // 4. Sign in
+                    if (injectedToken) {
+                        signInWithCustomToken(auth, injectedToken).catch(e => {
+                            console.error("Custom token sign-in failed, falling back to anonymous:", e);
+                            signInAnonymously(auth);
+                        });
+                    } else {
+                        signInAnonymously(auth);
+                    }
+                } else {
+                    // LOCAL MODE FALLBACK
+                    console.warn("Firebase configuration missing. Running game in Local Mode (Scores disabled).");
+                    if (statusMessage) statusMessage.textContent = 'Local Mode: Scores disabled. Click Start.';
+                    if (startButton) startButton.disabled = false;
+                    const userIdDisplay = document.getElementById('user-id-display');
+                    if (userIdDisplay) userIdDisplay.textContent = userId.substring(0, 8) + '...';
+                    isAuthReady = true; // Mark game as ready to start locally
+                }
+
+            } catch (e) {
+                console.error("Firebase Initialization Critical Error:", e);
+                if (statusMessage) statusMessage.textContent = 'Error initializing data services.';
+                if (startButton) startButton.disabled = true;
+            }
+        }
+
+
+        // --- Utility and Game Functions ---
+
+        function createGemSVG() {
+            return `
+                <svg viewBox="0 0 100 100" class="w-full h-full">
+                    <defs>
+                        <linearGradient id="gemGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#f59e0b;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#ef4444;stop-opacity:1" />
+                        </linearGradient>
+                    </defs>
+                    <!-- Main Body -->
+                    <path fill="url(#gemGradient)" stroke="#fff" stroke-width="2" 
+                        d="M 50 10 L 90 40 L 90 70 L 50 90 L 10 70 L 10 40 Z" 
+                        filter="url(#glow)"/>
+                    <!-- Reflection/Highlight -->
+                    <path fill="#ffffff50" 
+                        d="M 50 10 L 90 40 L 50 40 Z M 10 40 L 50 40 L 50 90 Z" 
+                        opacity="0.6"/>
+                </svg>
+            `;
+        }
+
+        function createHoles() {
+            board.innerHTML = ''; 
+            for (let i = 1; i <= 9; i++) {
+                const hole = document.createElement('div');
+                hole.classList.add('hole', 'relative');
+                hole.dataset.id = i;
+
+                const gem = document.createElement('div');
+                gem.classList.add('gem');
+                gem.innerHTML = createGemSVG();
+                gem.addEventListener('click', handleWhack);
+                
+                hole.appendChild(gem);
+                board.appendChild(hole);
+            }
+        }
+
+        function randomTime(min, max) {
+            return Math.round(Math.random() * (max - min) + min);
+        }
+
+        function randomHole(holes) {
+            const idx = Math.floor(Math.random() * holes.length);
+            const hole = holes[idx];
+            if (hole === lastHole) {
+                return randomHole(holes); 
+            }
+            lastHole = hole;
+            return hole;
+        }
+
+        function popUp() {
+            if (!gameActive) return; 
+
+            const holes = document.querySelectorAll('.hole');
+            const time = randomTime(500, 1500); 
+            const hole = randomHole(holes);
+            
+            hole.classList.add('up');
+
+            setTimeout(() => {
+                hole.classList.remove('up');
+                
+                if (gameActive) {
+                    popUpTimer = setTimeout(popUp, randomTime(300, 700)); 
+                }
+            }, time);
+        }
+
+        function handleWhack(e) {
+            if (!e.isTrusted || !gameActive) return; 
+
+            score++;
+            scoreDisplay.textContent = score;
+            
+            const gemElement = e.target.closest('.gem');
+            const holeElement = gemElement.closest('.hole');
+            
+            gemElement.classList.add('hit');
+            holeElement.classList.remove('up');
+            
+            setTimeout(() => {
+                gemElement.classList.remove('hit');
+            }, 100);
+        }
+
+        function resetGame() {
+            clearTimeout(popUpTimer);
+            clearInterval(timer);
+            
+            document.querySelectorAll('.hole').forEach(hole => hole.classList.remove('up'));
+
+            score = 0;
+            timeLeft = timeLimit;
+            if (scoreDisplay) scoreDisplay.textContent = score;
+            if (timeDisplay) timeDisplay.textContent = `${timeLeft}s`;
+            if (statusMessage) statusMessage.textContent = isFirebaseEnabled ? 'Ready to play! Click Start.' : 'Local Mode: Scores disabled. Click Start.';
+            if (startButton) {
+                startButton.disabled = false;
+                startButton.textContent = 'Start Game';
+            }
+            gameActive = false;
+        }
+
+        function startGame() { 
+            if (gameActive || !isAuthReady) return;
+
+            resetGame(); 
+            gameActive = true;
+            startButton.disabled = true;
+            startButton.textContent = 'Whacking...';
+            statusMessage.textContent = 'WHACK! WHACK! WHACK!';
+
+            popUp();
+
+            timer = setInterval(() => {
+                timeLeft--;
+                timeDisplay.textContent = `${timeLeft}s`;
+                
+                if (timeLeft <= 0) {
+                    endGame();
+                }
+            }, 1000);
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearTimeout(popUpTimer);
+            clearInterval(timer);
+
+            if (isFirebaseEnabled) {
+                saveScore(score);
+            }
+
+            modalScore.textContent = score;
+            messageModal.classList.remove('hidden');
+            document.getElementById('modal-title').textContent = (score > 15) ? "Impressive Score!" : "Time's Up!";
+
+            startButton.textContent = 'Start Game';
+            startButton.disabled = false;
+            statusMessage.textContent = `Game Over! Score: ${score}`;
+        }
+
+        function closeModal() {
+            messageModal.classList.add('hidden');
+            resetGame();
+        }
+
+        function showScoresModal() {
+            scoresModal.classList.remove('hidden');
+            fetchAndDisplayScores();
+        }
+
+        function closeScoresModal() {
+            scoresModal.classList.add('hidden');
+        }
+
+        // REMOVED: The goHome() function is no longer needed as navigation is handled by the <a> tag.
+
+
+        // --- Initialization on DOMContentLoaded ---
+
+        document.addEventListener('DOMContentLoaded', () => {
+            // 1. Assign ALL DOM References
+            board = document.getElementById('game-board');
+            scoreDisplay = document.getElementById('score-display');
+            timeDisplay = document.getElementById('time-display');
+            startButton = document.getElementById('start-button');
+            // homeButton is no longer needed as it's an <a> tag
+            scoresButton = document.getElementById('scores-button');
+            statusMessage = document.getElementById('status-message');
+            messageModal = document.getElementById('message-modal');
+            modalScore = document.getElementById('modal-score');
+            modalPlayAgainButton = document.getElementById('modal-play-again');
+            modalViewScoresButton = document.getElementById('modal-view-scores');
+            scoresModal = document.getElementById('scores-modal');
+            scoresList = document.getElementById('scores-list');
+            scoresCloseButton = document.getElementById('scores-close-button');
+
+
+            // 2. Initialize Game Board
+            if (board) createHoles();
+            
+            // 3. Attach Event Listeners
+            if (startButton) startButton.addEventListener('click', startGame);
+            // REMOVED: homeButton listener is removed
+            if (scoresButton) scoresButton.addEventListener('click', showScoresModal);
+
+            // Modal buttons
+            if (modalPlayAgainButton) modalPlayAgainButton.addEventListener('click', closeModal);
+            if (modalViewScoresButton) modalViewScoresButton.addEventListener('click', () => {
+                closeModal();
+                showScoresModal();
+            });
+            if (scoresCloseButton) scoresCloseButton.addEventListener('click', closeScoresModal);
+            
+            // 4. Initialize Firebase (This handles the local fallback)
+            initializeFirebase();
+        });
+
+    </script>
+</body>
+</html>

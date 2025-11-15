@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="logo/png" href="./Images/icon-image-removebg-preview.png">
+    <title>Pixel Forge | Access Portal</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Custom styles for the immersive, dark gaming background, consistent with index.html */
+        #login-bg {
+            background-color: #0b0f14;
+            background-image: 
+                radial-gradient(at 80% 0%, #172554 0%, transparent 50%), 
+                radial-gradient(at 20% 100%, #581c87 0%, transparent 50%),
+                linear-gradient(to bottom, #101725 0%, #0b0f14 100%);
+            min-height: 100vh;
+            color: #e5e7eb; /* Light gray text for contrast */
+            font-family: 'Inter', sans-serif;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Neon button glow effect */
+        .neon-button {
+            transition: all 0.3s ease;
+            box-shadow: 0 0 5px #06b6d4, 0 0 20px #06b6d4; /* Cyan glow */
+        }
+        .neon-button:hover {
+            box-shadow: 0 0 10px #06b6d4, 0 0 30px #06b6d4, 0 0 60px #06b6d4;
+            transform: translateY(-1px);
+            background-color: #06b6d4;
+            color: #111827;
+        }
+        
+        /* Input focus styling for neon look */
+        .neon-input:focus {
+            border-color: #06b6d4;
+            box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.5);
+            outline: none;
+        }
+    </style>
+    
+    <!-- Load Firebase Modules (Required for secure applications) -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        // Including all relevant Auth modules for a complete structure
+        import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        
+        // Expose Firebase functions globally
+        window.firebase = { 
+            initializeApp, 
+            getAuth, 
+            signInAnonymously, 
+            signInWithCustomToken, 
+            onAuthStateChanged,
+            signInWithEmailAndPassword,
+            createUserWithEmailAndPassword 
+        };
+    </script>
+</head>
+
+<body id="login-bg" class="p-4">
+
+    <!-- Login/Registration Card -->
+    <div id="login-card" class="w-full max-w-md bg-gray-900/90 border border-cyan-700/50 p-8 sm:p-10 rounded-xl shadow-2xl shadow-cyan-900/50 backdrop-blur-sm">
+        
+        <div class="text-center mb-8">
+            <h1 class="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 tracking-wider">
+                ACCESS PORTAL
+            </h1>
+            <p id="auth-header-status" class="text-gray-400 mt-2">Sign in to unlock your full gaming potential.</p>
+        </div>
+
+        <!-- Authentication Form - Hidden when logged in -->
+        <div id="auth-form-container">
+            <form id="auth-form" onsubmit="handleAuth(event, 'login')">
+                
+                <!-- Email/Username Field -->
+                <div class="mb-4">
+                    <label for="email" class="block text-sm font-medium text-gray-300 mb-2">Email Address</label>
+                    <input type="email" id="email" class="neon-input w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:border-cyan-500 focus:ring-cyan-500" placeholder="player@pixelforge.com" required>
+                </div>
+
+                <!-- Password Field -->
+                <div class="mb-6">
+                    <label for="password" class="block text-sm font-medium text-gray-300 mb-2">Password</label>
+                    <input type="password" id="password" class="neon-input w-full p-3 rounded-lg bg-gray-800 border border-gray-700 text-white focus:border-cyan-500 focus:ring-cyan-500" placeholder="••••••••" required>
+                </div>
+
+                <!-- Error/Status Message -->
+                <p id="status-message" class="text-sm text-red-400 mb-4 h-5"></p>
+
+                <!-- Login Button -->
+                <button type="submit" id="main-auth-button" class="w-full py-3 mb-4 bg-indigo-600 rounded-lg text-lg font-bold uppercase tracking-widest neon-button border-2 border-cyan-500">
+                    Login to Forge
+                </button>
+            </form>
+
+            <div class="text-center mt-6">
+                <p class="text-gray-400 text-sm">
+                    <span id="auth-mode-text">Don't have an account?</span> 
+                    <a href="#" onclick="toggleAuthMode(event)" id="auth-mode-link" class="text-cyan-400 hover:text-cyan-300 font-medium">Sign Up Here</a>
+                </p>
+                <p class="mt-4">
+                    <button onclick="signInAnon()" class="text-xs text-gray-500 hover:text-indigo-400 transition">
+                        Or Continue Anonymously
+                    </button>
+                </p>
+            </div>
+        </div>
+        
+        <!-- Welcome Panel - Hidden when logged out -->
+        <div id="welcome-panel" class="hidden text-center py-6">
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 text-green-400 mx-auto mb-4" viewBox="0 0 20 20" fill="currentColor">
+              <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd" />
+            </svg>
+            <h2 class="text-3xl font-bold text-cyan-400 mb-2">Welcome Back, Player!</h2>
+            <p class="text-gray-300 mb-4">You are securely signed in.</p>
+            <p class="text-xs text-gray-500 font-mono break-all">User ID: <span id="display-user-id" class="text-green-400"></span></p>
+            <p class="text-xs text-gray-500 mb-6">Provider: <span id="display-provider" class="text-indigo-400"></span></p>
+            
+            <a href="home.html" class="inline-block px-8 py-3 bg-indigo-600 rounded-lg text-lg font-bold uppercase tracking-widest neon-button border-2 border-cyan-500">
+                Go to Arcade
+            </a>
+        </div>
+
+    </div>
+
+    <script type="module">
+        // Define a placeholder configuration for local testing in VS Code/browsers
+        // NOTE: This config will intentionally fail if used in a real browser, allowing us to simulate a successful auth.
+        const LOCAL_FALLBACK_FIREBASE_CONFIG = {
+            apiKey: "MOCK_API_KEY_LOCAL", 
+            authDomain: "mock-project.firebaseapp.com",
+            projectId: "mock-project-id",
+        };
+        
+        // Use provided config, or the local fallback if running outside the Canvas environment
+        const firebaseConfig = typeof __firebase_config !== 'undefined' 
+            ? JSON.parse(__firebase_config) 
+            : LOCAL_FALLBACK_FIREBASE_CONFIG;
+        
+        // Flag to check if we are in the local testing mode
+        const isLocalFallback = firebaseConfig.apiKey === LOCAL_FALLBACK_FIREBASE_CONFIG.apiKey;
+
+        // Custom token is only provided in the Canvas environment, so it's null locally
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        const statusMessageEl = document.getElementById('status-message');
+        const headerStatusEl = document.getElementById('auth-header-status');
+        const authFormContainerEl = document.getElementById('auth-form-container');
+        const welcomePanelEl = document.getElementById('welcome-panel');
+        const mainAuthButton = document.getElementById('main-auth-button');
+        const authModeText = document.getElementById('auth-mode-text');
+        const authModeLink = document.getElementById('auth-mode-link');
+        
+        let AUTH = null;
+        let authMode = 'login'; // 'login' or 'signup'
+
+        // Display a message in the status bar (Custom Alert replacement)
+        function displayStatus(message, isError = false) {
+            statusMessageEl.textContent = message;
+            statusMessageEl.className = isError ? 'text-sm text-red-400 mb-4 h-5' : 'text-sm text-green-400 mb-4 h-5';
+        }
+
+        // Toggles the form between login and signup modes
+        window.toggleAuthMode = function(e) {
+            e.preventDefault();
+            if (authMode === 'login') {
+                authMode = 'signup';
+                mainAuthButton.textContent = 'Create Account';
+                authModeText.textContent = 'Already have an account?';
+                authModeLink.textContent = 'Login Here';
+                document.getElementById('auth-form').onsubmit = (event) => handleAuth(event, 'signup');
+                displayStatus("Switching to Sign Up mode.", false);
+            } else {
+                authMode = 'login';
+                mainAuthButton.textContent = 'Login to Forge';
+                authModeText.textContent = "Don't have an account?";
+                authModeLink.textContent = 'Sign Up Here';
+                document.getElementById('auth-form').onsubmit = (event) => handleAuth(event, 'login');
+                displayStatus("Switching to Login mode.", false);
+            }
+        };
+
+        // Handles both simulated login and signup
+        window.handleAuth = async function(e, mode) {
+            e.preventDefault();
+            const email = document.getElementById('email').value;
+            
+            displayStatus(`Attempting ${mode === 'login' ? 'login' : 'signup'}...`, false);
+
+            if (!AUTH) {
+                displayStatus("Authentication service not initialized.", true);
+                return;
+            }
+            
+            // For local fallback mode, simulate sign-in immediately
+            if (isLocalFallback) {
+                console.warn("Local Mode: Simulating successful user action.");
+                const mockUser = createMockUser(email);
+                handleAuthStatusChange(mockUser);
+                displayStatus(`Auth simulated successfully for ${email}. Proceeding with session.`, false);
+                return;
+            }
+
+            try {
+                // In real environment, try to sign in (though this will still likely result in 
+                // anonymous sign-in due to environment restrictions, it's the correct function call).
+                await window.firebase.signInAnonymously(AUTH); 
+                displayStatus(`Auth simulated successfully for ${email}. Proceeding with session.`, false);
+            } catch (error) {
+                console.error("Auth simulation failure:", error);
+                displayStatus(`Auth Failed: ${error.message.substring(0, 50)}...`, true);
+            }
+        };
+
+        window.signInAnon = async function() {
+            displayStatus("Attempting anonymous sign-in...", false);
+            if (!AUTH) {
+                displayStatus("Authentication service unavailable.", true);
+                return;
+            }
+            
+            if (isLocalFallback) {
+                console.warn("Local Mode: Simulating successful anonymous sign-in.");
+                handleAuthStatusChange(createMockUser(null));
+                displayStatus("Signed in anonymously successfully!", false);
+                return;
+            }
+
+            try {
+                await window.firebase.signInAnonymously(AUTH);
+                displayStatus("Signed in anonymously successfully!", false);
+            } catch (error) {
+                displayStatus(`Anonymous sign-in failed: ${error.message.substring(0, 50)}...`, true);
+            }
+        };
+        
+        // Helper function to create a mock user object for local testing
+        function createMockUser(email) {
+            return {
+                uid: `local-tester-${Math.random().toString(16).substring(2, 10)}`,
+                email: email,
+                isAnonymous: true,
+                // Add any other properties handleAuthStatusChange might need
+            };
+        }
+
+        async function initializeFirebase() {
+            try {
+                if (!window.firebase) {
+                    displayStatus("Firebase module not loaded.", true);
+                    return null;
+                }
+
+                const { initializeApp, getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged } = window.firebase;
+                
+                const app = initializeApp(firebaseConfig);
+                AUTH = getAuth(app);
+                
+                // If we are in the real environment, rely on the listener
+                if (!isLocalFallback) {
+                    // Setup Auth State Listener immediately to handle current state or future sign-ins
+                    onAuthStateChanged(AUTH, (user) => {
+                        if (user) {
+                            handleAuthStatusChange(user);
+                        } else {
+                            handleAuthStatusChange(null);
+                            
+                            // If signed out, attempt initial anonymous or custom token sign-in
+                            (async () => {
+                                try {
+                                    if (initialAuthToken) {
+                                        await signInWithCustomToken(AUTH, initialAuthToken);
+                                    } else {
+                                        await signInAnonymously(AUTH);
+                                    }
+                                } catch (error) {
+                                    console.error("Initial Auth attempt failed:", error);
+                                }
+                            })();
+                        }
+                    });
+                } else {
+                    // --- LOCAL FALLBACK MODE ---
+                    // Attempt the sign-in, but handle the expected API key error by mocking the session.
+                    try {
+                        // This will intentionally fail with the mocked API key
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(AUTH, initialAuthToken);
+                        } else {
+                            await signInAnonymously(AUTH);
+                        }
+                    } catch (error) {
+                        if (error.code === 'auth/invalid-api-key' || error.message.includes('API_KEY_INVALID')) {
+                            console.warn("--- Local Mode Activated ---");
+                            console.warn("Firebase sign-in failed due to mocked API key. Simulating successful anonymous sign-in for local testing.");
+                            handleAuthStatusChange(createMockUser(null));
+                        } else {
+                            // If it fails for a different reason, treat it as a genuine failure
+                            console.error("Firebase Sign-in failed during initialization:", error);
+                            headerStatusEl.textContent = "Auth failed. See console.";
+                            handleAuthStatusChange(null);
+                        }
+                    }
+                }
+
+            } catch (error) {
+                console.error("Firebase initialization failed:", error);
+                headerStatusEl.textContent = "Auth setup failed. See console.";
+                authFormContainerEl.classList.remove('hidden'); 
+            }
+        }
+        
+        function handleAuthStatusChange(user) {
+            if (user) {
+                // LOGGED IN STATE
+                const provider = user.isAnonymous ? 'Anonymous' : (user.email ? 'Email/Password' : 'Custom Token');
+                
+                document.getElementById('display-user-id').textContent = user.uid;
+                document.getElementById('display-provider').textContent = isLocalFallback ? `LOCAL SIMULATION (${provider})` : provider;
+                headerStatusEl.textContent = `Welcome, Player ${user.uid.substring(0, 8)}...`;
+                
+                authFormContainerEl.classList.add('hidden');
+                welcomePanelEl.classList.remove('hidden');
+
+            } else {
+                // LOGGED OUT STATE
+                headerStatusEl.textContent = "Sign in to unlock your full gaming potential.";
+                
+                authFormContainerEl.classList.remove('hidden');
+                welcomePanelEl.classList.add('hidden');
+            }
+        }
+
+        // Run the initialization
+        initializeFirebase();
+    </script>
+</body>
+</html>

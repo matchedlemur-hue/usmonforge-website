@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="logo/png" href="./Images/icon-snake.PNG">
+    <title>Snake Game Board</title>
+    <!-- Load Firebase Modules -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        import { getFirestore, collection, query, addDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        
+        // Expose Firebase functions globally for the game script
+        window.firebase = { initializeApp, getAuth, signInAnonymously, signInWithCustomToken, getFirestore, collection, query, addDoc, onSnapshot };
+    </script>
+    
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- Load Font Awesome for Icons (NEW) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+
+    <style>
+        /* --- Custom CSS for Game Board and Canvas --- */
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #1f2937;
+        }
+        
+        #game-window {
+            background-image: url('https://placehold.co/800x600/1e293b/a1a1aa?text=Snake+Skin+Texture');
+            background-size: cover;
+            background-position: center;
+            border: 8px solid #34d399;
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.5);
+        }
+
+        body canvas#gameCanvas { 
+            background-color: rgb(0, 0, 0); 
+            border: 2px solid white;
+            box-shadow: 0px 0px 10px rgba(76, 175, 80, 0.7);
+        }
+
+        /* --- Modal and Button Styling --- */
+
+        @keyframes pulse-in {
+            0% { opacity: 0; transform: translate(-50%, -60%) scale(0.5); border-color: #4CAF50; }
+            50% { opacity: 1; transform: translate(-50%, -50%) scale(1.05); border-color: #FF5733; }
+            100% { opacity: 1; transform: translate(-50%, -50%) scale(1); border-color: #4CAF50; }
+        }
+
+        .system-modal {
+            display: none;
+            position: fixed; 
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(31, 41, 55, 0.95);
+            padding: 30px;
+            border-radius: 12px;
+            text-align: center;
+            z-index: 1000; 
+            width: 350px; 
+            border: 3px solid #34d399;
+            color: white;
+            box-shadow: 0 0 25px rgba(52, 211, 153, 0.6);
+        }
+        
+        #game-over-message {
+            animation: pulse-in 0.5s ease-out both; 
+        }
+
+        /* General Button Styling */
+        .btn-base {
+            padding: 10px 20px;
+            font-size: 1em;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: background-color 0.3s, transform 0.1s;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            text-decoration: none; 
+            font-weight: 600;
+        }
+        
+        /* FIX APPLIED HERE:
+        We are now using a combined selector to apply the primary green style 
+        to both the Start button and the Restart button.
+        */
+        #restart-game-button, #start-button { 
+            background-color: #4CAF50; /* Green, matching Restart */
+        }
+        #restart-game-button:hover, #start-button:hover { 
+            background-color: #3c8d3f; /* Darker Green, matching Restart */
+            transform: scale(1.05);
+        }
+        
+        /* Home Button Styling (Different Color) */
+        #home-game-button {
+            background-color: #3b82f6; /* Blue for Home */
+        }
+        #home-game-button:hover { 
+            background-color: #2563eb;
+            transform: scale(1.05);
+        }
+
+        .highscore-list {
+            margin-top: 15px;
+            max-height: 200px;
+            overflow-y: auto;
+            text-align: left;
+            padding: 10px;
+            border: 1px dashed #34d399;
+            background-color: rgba(0, 0, 0, 0.3);
+            border-radius: 6px;
+        }
+        .score-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 0;
+            font-size: 0.9em;
+            border-bottom: 1px dotted #4b5563;
+        }
+        .score-item:last-child {
+            border-bottom: none;
+        }
+        .score-value {
+            font-weight: bold;
+            color: #fcd34d; /* Yellow */
+        }
+    </style>
+</head>
+<body class="flex items-center justify-center h-screen p-4">
+
+    <!-- Information Bar: User ID -->
+    <div class="fixed top-2 left-2 text-xs text-gray-400 p-1 rounded bg-gray-800/70">
+        User ID: <span id="userIdDisplay" class="font-mono text-green-400">Initializing...</span>
+    </div>
+
+    <!-- Main Game Window Container -->
+    <div id="game-window" class="w-full max-w-lg p-6 rounded-xl flex flex-col items-center space-y-4">
+        
+        <!-- Score Board - positioned at the very top -->
+        <div id="scoreBoard" class="text-3xl font-bold text-yellow-300 bg-gray-900/70 px-4 py-2 rounded-lg shadow-xl w-full text-center">
+            Current Score: <span class="data-field" data-metric="score-value">0</span>
+        </div>
+
+        <!-- Canvas Game Area -->
+        <canvas id="gameCanvas" width="400" height="400" class="rounded-lg shadow-2xl"></canvas>
+
+    </div>
+    <!-- End Main Game Window Container -->
+
+    <!-- Modals (Overlay on top of everything) -->
+    <div id="start-game-initializer" class="system-modal" data-status="initial" style="display: block;">
+        <h1 class="text-3xl font-extrabold mb-2 text-green-400">Snake Game</h1>
+        <p>Press the button below to start the game.</p>
+        <!-- Start Button now uses the green style defined above -->
+        <button id="start-button" class="btn-base mt-4">Start!</button>
+    </div>
+
+    <div id="game-over-message" class="system-modal" data-status="inactive" data-purpose="final-display">
+        <h1 class="text-3xl font-extrabold mb-2 text-red-500">Game Over!</h1> 
+        <p class="text-xl">Final Score: <span id="finalScore" data-result-type="numeric" class="text-yellow-300 font-bold">0</span> units</p>
+        
+        <!-- High Score Section -->
+        <h2 class="text-xl font-bold mt-4 text-green-400">Top 5 High Scores</h2>
+        <div class="highscore-list">
+            <p id="loadingScores" class="text-gray-500">Loading scores...</p>
+            <ul id="highScoresList" class="space-y-1">
+                <!-- Scores will be dynamically inserted here -->
+            </ul>
+        </div>
+
+        <!-- NEW: Action Buttons (Home and Restart) -->
+        <div class="flex justify-center space-x-4 mt-6">
+            <!-- Home Button (Now uses flex for icon and link structure) -->
+            <a href="home.html" id="home-game-button" class="btn-base">
+                <i class="fas fa-home mr-2"></i> Home
+            </a>
+            
+            <!-- Restart Button (Fixed ID and class) -->
+            <button id="restart-game-button" class="btn-base">Restart Game</button>
+        </div>
+    </div>
+
+    <script type="module">
+        // Global variables provided by the environment
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+        const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : null;
+        const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+        // Firebase References
+        let FIREBASE_APP = null;
+        let DB = null;
+        let AUTH = null;
+        let USER_ID = 'unknown';
+
+        // --- Firebase Persistence Logic ---
+
+        async function initializeFirebaseAndAuth() {
+            try {
+                if (!firebaseConfig || !window.firebase) {
+                    console.error("Firebase config or imports are missing. Cannot initialize persistence.");
+                    return;
+                }
+
+                const { initializeApp, getAuth, signInWithCustomToken, signInAnonymously, getFirestore } = window.firebase;
+                
+                FIREBASE_APP = initializeApp(firebaseConfig);
+                DB = getFirestore(FIREBASE_APP);
+                AUTH = getAuth(FIREBASE_APP);
+
+                // Auth using custom token or anonymously
+                if (initialAuthToken) {
+                    await signInWithCustomToken(AUTH, initialAuthToken);
+                } else {
+                    await signInAnonymously(AUTH);
+                }
+
+                USER_ID = AUTH.currentUser?.uid || 'anonymous-' + crypto.randomUUID();
+                document.getElementById('userIdDisplay').textContent = USER_ID;
+                console.log("Firebase initialized. User ID:", USER_ID);
+
+                setupScoreListener();
+
+            } catch (error) {
+                console.error("Firebase initialization or authentication failed:", error);
+            }
+        }
+
+        function getHighScoresCollectionRef() {
+            const { collection } = window.firebase;
+             // Public path for scores: /artifacts/{appId}/public/data/highscores
+            return collection(DB, 'artifacts', appId, 'public', 'data', 'highscores');
+        }
+
+        async function saveHighScore(score) {
+            if (!DB || score === 0) return; 
+
+            try {
+                const { addDoc } = window.firebase;
+                
+                await addDoc(getHighScoresCollectionRef(), {
+                    score: score,
+                    userId: USER_ID,
+                    timestamp: Date.now()
+                });
+            } catch (error) {
+                console.error("Failed to save high score:", error);
+            }
+        }
+
+        function setupScoreListener() {
+            if (!DB) return;
+
+            const { onSnapshot, query } = window.firebase;
+            const scoresQuery = query(getHighScoresCollectionRef());
+            const listElement = document.getElementById('highScoresList');
+            const loadingElement = document.getElementById('loadingScores');
+
+            onSnapshot(scoresQuery, (snapshot) => {
+                loadingElement.style.display = 'none';
+                listElement.innerHTML = ''; 
+
+                const scores = [];
+                snapshot.forEach(doc => {
+                    scores.push(doc.data());
+                });
+
+                // Sort scores descending by score, then ascending by timestamp
+                scores.sort((a, b) => {
+                    if (a.score !== b.score) {
+                        return b.score - a.score; // Higher score first
+                    }
+                    return a.timestamp - b.timestamp; // Earlier timestamp first
+                });
+                
+                // Display only the top 5
+                scores.slice(0, 5).forEach((scoreData, index) => {
+                    const listItem = document.createElement('li');
+                    listItem.className = 'score-item';
+                    
+                    // Highlight the current user's score 
+                    const isCurrentUser = scoreData.userId === USER_ID;
+                    const nameDisplay = scoreData.userId.substring(0, 8) + (isCurrentUser ? " (You)" : "...");
+
+                    listItem.innerHTML = `
+                        <span class="${isCurrentUser ? 'text-green-300 font-extrabold' : ''}">${index + 1}. ${nameDisplay}</span>
+                        <span class="score-value">${scoreData.score}</span>
+                    `;
+                    listElement.appendChild(listItem);
+                });
+            }, (error) => {
+                console.error("Error listening to high scores:", error);
+                loadingElement.textContent = "Error loading scores.";
+            });
+        }
+
+
+        // --- Game Logic (Same as before, updated to integrate Firebase) ---
+
+        // Global State Manager Object
+        const GLOBAL_CONTEXT_MANAGER = {
+            CANVAS_REF: document.getElementById('gameCanvas'),
+            CTX_INSTANCE: document.getElementById('gameCanvas').getContext('2d'),
+            SCORE_DISPLAY_ELEMENT: document.querySelector('[data-metric="score-value"]'),
+            END_MSG_ELEMENT: document.getElementById('game-over-message'),
+            START_MSG_ELEMENT: document.getElementById('start-game-initializer'),
+            FINAL_SCORE_ELEMENT: document.getElementById('finalScore'),
+            GRID_UNIT_SIZE: 20,
+            GLOBAL_CANVAS_DIMENSION: 400,
+            FPS_INTERVAL_MS: 100, // Time in milliseconds for the game tick
+            INITIAL_VELOCITY_VECTOR: { dx_component: 20, dy_component: 0 },
+            ANIMATION_FRAME_ID: null 
+        };
+
+        class GameEntity {
+            constructor(x, y, color) {
+                this.position = { x, y };
+                this.renderColor = color;
+                this.size = GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE;
+            }
+
+            // MODIFIED: Accepts directionVector for rotation
+            draw(context, directionVector) {
+                context.save(); 
+
+                const S = this.size;
+                const halfS = S / 2;
+                const centerX = this.position.x + halfS;
+                const centerY = this.position.y + halfS;
+
+                // 1. Translate the canvas origin to the center of the segment
+                context.translate(centerX, centerY);
+
+                // 2. Calculate rotation angle using atan2(dy, dx)
+                // This gives the angle in radians from the positive x-axis (right direction)
+                let rotationAngle = Math.atan2(directionVector.dy_component, directionVector.dx_component);
+                context.rotate(rotationAngle);
+                
+                // 3. Draw the shape pointing right (0 rotation) relative to the new origin (0, 0)
+                context.fillStyle = this.renderColor;
+                context.strokeStyle = 'black'; 
+                context.lineWidth = 1;
+
+                context.beginPath();
+                // Tip (Right)
+                context.moveTo(halfS, 0); 
+                // Top-Left Base
+                context.lineTo(-halfS, -halfS); 
+                // Bottom-Left Base
+                context.lineTo(-halfS, halfS); 
+                context.closePath();
+                context.fill();
+                context.stroke();
+
+                context.restore(); // 4. Restore the canvas state
+            }
+        }
+
+        class SnakeHeadEntity extends GameEntity {
+            constructor(x, y) {
+                super(x, y, '#2ECC71'); 
+            }
+            
+            // Head is a circle, so no rotation logic needed here.
+            draw(context) {
+                context.fillStyle = this.renderColor;
+                context.beginPath();
+                const halfSize = this.size / 2;
+                context.arc(this.position.x + halfSize, this.position.y + halfSize, halfSize, 0, 2 * Math.PI);
+                context.fill();
+                context.strokeStyle = 'black'; 
+                context.stroke();
+            }
+        }
+
+
+        class ConsumableEntity extends GameEntity {
+            constructor() {
+                super(0, 0, '#FF5733'); 
+                this.recalculatePosition(); 
+                this.animationFrame = 0; 
+                this.pulsingSpeed = 0.1; 
+            }
+
+            recalculatePosition() {
+                let isConflicting = true;
+                while (isConflicting) {
+                    this.position.x = this.getRandomAxisCoord(0, GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION - GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE);
+                    this.position.y = this.getRandomAxisCoord(0, GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION - GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE);
+                    isConflicting = SNAKE_MODULE.isPositionOccupied(this.position.x, this.position.y);
+                }
+            }
+
+            getRandomAxisCoord(minVal, maxVal) {
+                return Math.floor(Math.random() * ((maxVal - minVal) / GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE + 1)) * GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE;
+            }
+            
+            draw(context) {
+                this.animationFrame += this.pulsingSpeed;
+                
+                const baseRadius = this.size / 2;
+                const minRadiusFactor = 0.8; 
+                const maxRadiusFactor = 1.0; 
+                const pulsatingRadius = baseRadius * (minRadiusFactor + (maxRadiusFactor - minRadiusFactor) * (0.5 + 0.5 * Math.sin(this.animationFrame))); 
+                
+                const centerX = this.position.x + baseRadius;
+                const centerY = this.position.y + baseRadius;
+
+                context.fillStyle = this.renderColor;
+                context.beginPath();
+                context.arc(centerX, centerY, pulsatingRadius, 0, 2 * Math.PI);
+                context.fill();
+                context.strokeStyle = 'black'; 
+                context.stroke();
+            }
+        }
+        
+        // --- Core Game State Variables ---
+        let snakeSegmentArray = [];
+        let consumableItem;
+        let movementVector = GLOBAL_CONTEXT_MANAGER.INITIAL_VELOCITY_VECTOR;
+        let scoreCounter = 0;
+        let isDirectionChangeBlocked = false;
+        let isSystemOperational = false;
+        let recursiveGameLoopTimerID;
+        // --- End Core Game State ---
+
+        // Object Literal for Snake Logic
+        const SNAKE_MODULE = {
+            reset: function() {
+                snakeSegmentArray = Array.from({ length: 1 }, () => ({ x: 10 * GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE, y: 10 * GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE }));
+            },
+
+            isPositionOccupied: function(x, y) {
+                return snakeSegmentArray.some(segment => segment.x === x && segment.y === y);
+            },
+
+            // MODIFIED: Passes movementVector to GameEntity.draw for rotation
+            renderSegments: function() {
+                // Body segments (i > 0)
+                for (let i = 1; i < snakeSegmentArray.length; i++) {
+                    const segment = snakeSegmentArray[i];
+                    const part = new GameEntity(segment.x, segment.y, '#4CAF50');
+                    // Pass the global movementVector to orient the body triangles
+                    part.draw(GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE, movementVector); 
+                }
+                
+                // Head segment (i = 0)
+                const headData = snakeSegmentArray[0];
+                const head = new SnakeHeadEntity(headData.x, headData.y);
+                head.draw(GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE);
+            },
+
+            advanceState: function() {
+                const nextHeadPosition = {
+                    x: snakeSegmentArray[0].x + movementVector.dx_component,
+                    y: snakeSegmentArray[0].y + movementVector.dy_component
+                };
+
+                snakeSegmentArray = [nextHeadPosition, ...snakeSegmentArray];
+
+                if (SNAKE_MODULE.checkConsumption(nextHeadPosition)) {
+                    scoreCounter += 10;
+                    GLOBAL_CONTEXT_MANAGER.SCORE_DISPLAY_ELEMENT.textContent = scoreCounter;
+                    consumableItem.recalculatePosition(); 
+                } else {
+                    snakeSegmentArray.pop(); 
+                }
+            },
+
+            checkConsumption: function(head) {
+                const foodRadius = GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE / 2;
+                const foodCenterX = consumableItem.position.x + foodRadius;
+                const foodCenterY = consumableItem.position.y + foodRadius;
+
+                const headCenterX = head.x + GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE / 2;
+                const headCenterY = head.y + GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE / 2;
+
+                const distance = Math.sqrt(
+                    Math.pow(headCenterX - foodCenterX, 2) + 
+                    Math.pow(headCenterY - foodCenterY, 2)
+                );
+                
+                return distance < (GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE * 0.7); 
+            },
+
+            checkTerminalCondition: function() {
+                const head = snakeSegmentArray[0];
+                const tailSegments = snakeSegmentArray.slice(4); 
+                
+                const selfCollision = tailSegments.some(segment => segment.x === head.x && segment.y === head.y);
+
+                const X_MAX = GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION;
+                const Y_MAX = GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION;
+                
+                const boundaryCollision = head.x < 0 || head.x >= X_MAX || head.y < 0 || head.y >= Y_MAX;
+
+                return selfCollision || boundaryCollision;
+            }
+        };
+
+        function processInputEvent(e) {
+            if (!isSystemOperational) return; 
+
+            const KEY_MAP = {
+                37: 'LEFT_VECTOR', 38: 'UP_VECTOR', 39: 'RIGHT_VECTOR', 40: 'DOWN_VECTOR' 
+            };
+
+            const vector = KEY_MAP[e.keyCode];
+            if (!vector || isDirectionChangeBlocked) return;
+
+            isDirectionChangeBlocked = true; 
+
+            const current_dx = movementVector.dx_component;
+            const current_dy = movementVector.dy_component;
+            const GRID = GLOBAL_CONTEXT_MANAGER.GRID_UNIT_SIZE;
+
+            switch (vector) {
+                case 'LEFT_VECTOR':
+                    if (current_dx !== GRID) { movementVector = { dx_component: -GRID, dy_component: 0 }; }
+                    break;
+                case 'UP_VECTOR':
+                    if (current_dy !== GRID) { movementVector = { dx_component: 0, dy_component: -GRID }; }
+                    break;
+                case 'RIGHT_VECTOR':
+                    if (current_dx !== -GRID) { movementVector = { dx_component: GRID, dy_component: 0 }; }
+                    break;
+                case 'DOWN_VECTOR':
+                    if (current_dy !== -GRID) { movementVector = { dx_component: 0, dy_component: GRID }; }
+                    break;
+            }
+        }
+        
+        // --- Game Lifecycle Functions ---
+        
+        function clearDisplay() {
+            GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE.fillStyle = 'black';
+            GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE.fillRect(0, 0, GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION, GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION);
+        }
+
+        function visualUpdate() {
+            if (!isSystemOperational) return;
+            
+            clearDisplay();
+            consumableItem.draw(GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE);
+            SNAKE_MODULE.renderSegments();
+            
+            GLOBAL_CONTEXT_MANAGER.ANIMATION_FRAME_ID = requestAnimationFrame(visualUpdate);
+        }
+
+        const gameExecutor = (function() {
+            function tickExecution() {
+                if (!isSystemOperational) return;
+                isDirectionChangeBlocked = false;
+                
+                SNAKE_MODULE.advanceState();
+                
+                if (SNAKE_MODULE.checkTerminalCondition()) {
+                    terminateGameSession();
+                    return; 
+                }
+
+                recursiveGameLoopTimerID = setTimeout(tickExecution, GLOBAL_CONTEXT_MANAGER.FPS_INTERVAL_MS);
+            }
+            return tickExecution; 
+        })();
+
+        function initializeGameLoop() {
+            GLOBAL_CONTEXT_MANAGER.START_MSG_ELEMENT.style.display = 'none'; 
+            executeInitializationSequence();
+        }
+
+        function terminateGameSession() {
+            isSystemOperational = false;
+            clearTimeout(recursiveGameLoopTimerID);
+            cancelAnimationFrame(GLOBAL_CONTEXT_MANAGER.ANIMATION_FRAME_ID);
+            
+            // Save the final score before displaying the end screen
+            saveHighScore(scoreCounter);
+
+            GLOBAL_CONTEXT_MANAGER.FINAL_SCORE_ELEMENT.textContent = scoreCounter;
+            GLOBAL_CONTEXT_MANAGER.END_MSG_ELEMENT.style.display = 'block';
+        }
+
+        function executeInitializationSequence() {
+            SNAKE_MODULE.reset();
+            movementVector = GLOBAL_CONTEXT_MANAGER.INITIAL_VELOCITY_VECTOR;
+            scoreCounter = 0;
+            GLOBAL_CONTEXT_MANAGER.SCORE_DISPLAY_ELEMENT.textContent = '0';
+            isSystemOperational = true;
+            
+            GLOBAL_CONTEXT_MANAGER.END_MSG_ELEMENT.style.display = 'none';
+            GLOBAL_CONTEXT_MANAGER.START_MSG_ELEMENT.style.display = 'none';
+
+            consumableItem = new ConsumableEntity(); 
+
+            gameExecutor(); 
+            visualUpdate(); 
+        }
+
+        // --- Initial Configuration ---
+        (function attachListeners() {
+            document.addEventListener('keydown', processInputEvent);
+            // Attach event listeners programmatically since they are inside a module script
+            document.getElementById('start-button').addEventListener('click', initializeGameLoop);
+            
+            // NOTE: Re-attached listener to the corrected, unique ID for the Restart button (NEW)
+            document.getElementById('restart-game-button').addEventListener('click', executeInitializationSequence);
+            
+            // No listener needed for the home button as it uses a standard anchor tag href
+        })();
+
+        // Initialization block
+        (async function initialDrawAndSetup() {
+            // 1. Initial Canvas Draw
+            SNAKE_MODULE.reset(); 
+            const ctx = GLOBAL_CONTEXT_MANAGER.CTX_INSTANCE;
+            const size = GLOBAL_CONTEXT_MANAGER.GLOBAL_CANVAS_DIMENSION;
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, size, size);
+            SNAKE_MODULE.renderSegments();
+            
+            // 2. Initialize Firebase and await completion
+            await initializeFirebaseAndAuth();
+        })();
+
+    </script>
+</body>
+</html>

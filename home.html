@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="logo/png" href="./Images/icon-image-removebg-preview.png">
+    <title>Pixel Forge: Your Gaming Hub</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font (required for standard Tailwind/Web design) -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+
+    <style>
+        /* Custom styles for the immersive, dark gaming background */
+        #gaming-bg {
+        /* Dark background with radial gradients for a neon/sci-fi glow effect */
+            background-color: #0b0f14;
+            background-image:
+            radial-gradient(at 80% 0%, #172554 0%, transparent 50%),
+            radial-gradient(at 20% 100%, #581c87 0%, transparent 50%),
+            linear-gradient(to bottom, #101725 0%, #0b0f14 100%);
+            min-height: 100vh;
+            color: #e5e7eb; /* Light gray text for contrast */
+            font-family: 'Inter', sans-serif;
+        }
+
+        /* Neon button glow effect */
+        .neon-button {
+            transition: all 0.3s ease;
+            box-shadow: 0 0 5px #06b6d4, 0 0 25px #06b6d4; /* Cyan glow */
+        }
+
+        .neon-button:hover {
+            box-shadow: 0 0 10px #06b6d4, 0 0 40px #06b6d4, 0 0 80px #06b6d4;
+            transform: translateY(-2px);
+            background-color: #06b6d4;
+            color: #111827;
+        }
+
+        /* Account Icon Glow when Authenticated */
+        .user-icon-glow {
+            /* Apply a strong, consistent neon glow for logged-in state */
+            box-shadow: 0 0 8px #06b6d4, 0 0 20px #06b6d4;
+        }
+
+        /* Card hover effect */
+        .game-card:hover {
+            transform: scale(1.03);
+            box-shadow: 0 15px 30px rgba(6, 182, 212, 0.4);
+            border-color: #06b6d4;
+        }
+
+        /* Dropdown menu styling for a dark theme */
+        .dropdown-menu-item:hover {
+            background-color: #1f2937; /* Darker gray hover */
+            color: #06b6d4; /* Cyan text */
+        }
+    </style>
+
+    <!--
+        1. FIREBASE MODULE IMPORTS:
+        FIXED: Removed 'setLogLevel' import as it caused a SyntaxError, which prevented the
+        entire module from loading.
+    -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getAuth, onAuthStateChanged, signInAnonymously, signInWithCustomToken, signOut } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+        // Expose Firebase functions globally for the non-module script to access
+        window.firebase = {
+            initializeApp,
+            getAuth,
+            onAuthStateChanged,
+            signInAnonymously,
+            signInWithCustomToken,
+            signOut,
+        };
+    </script>
+</head>
+<body id="gaming-bg">
+    <!-- 1. Navigation Bar (Sticky and Responsive) -->
+    <nav class="sticky top-0 z-50 bg-gray-900/90 backdrop-blur-sm shadow-2xl shadow-cyan-800/30">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between items-center h-16">
+                <!-- Logo -->
+                <a href="#" class="flex-shrink-0 text-2xl font-extrabold tracking-wider text-cyan-400">
+                    <span class="text-indigo-400">USMON</span> FORGE
+                </a>
+
+                <!-- Desktop Menu -->
+                <div class="hidden sm:ml-6 sm:flex sm:space-x-8">
+                    <a href="#" class="inline-flex items-center px-1 pt-1 border-b-2 border-cyan-500 text-sm font-medium text-white hover:text-cyan-400 transition duration-150">Home</a>
+                    <a href="#featured" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-300 hover:border-indigo-400 hover:text-white transition duration-150">Arcade</a>
+                    <a href="./high-scores.html" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-300 hover:border-indigo-400 hover:text-white transition duration-150">High Scores</a>
+                    <!-- NEW ITEM ADDED HERE: Whack-A-Game -->
+                    <a href="./whack-a-game.html" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-300 hover:border-indigo-400 hover:text-white transition duration-150">Whack-A-Game</a>
+                    <!-- DYNAMIC AUTH LINK CONTAINER - DESKTOP -->
+                    <div id="auth-desktop-link-container" class="flex items-center">
+                        <!-- Content injected by JavaScript -->
+                    </div>
+                </div>
+
+                <!-- Mobile Menu Button (Hamburger) -->
+                <div class="-mr-2 flex items-center sm:hidden">
+                    <button id="mobile-menu-toggle" class="inline-flex items-center justify-center p-2 rounded-md text-gray-400 hover:text-white hover:bg-gray-800 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-cyan-500">
+                        <svg class="h-6 w-6" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Mobile Menu (Hidden by default) -->
+        <div id="mobile-menu" class="sm:hidden hidden pb-3 space-y-1">
+            <a href="#" class="block pl-3 pr-4 py-2 border-l-4 border-cyan-500 text-base font-medium text-white bg-gray-800/50">Home</a>
+            <a href="#featured" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-300 hover:bg-gray-800 hover:border-indigo-400">Arcade</a>
+            <a href="#scores" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-300 hover:bg-gray-800 hover:border-indigo-400">High Scores</a>
+            <!-- NEW ITEM ADDED HERE: Whack-A-Game -->
+            <a href="./whack-a-game.html" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-300 hover:bg-gray-800 hover:border-indigo-400">Whack-A-Game</a>
+            <!-- DYNAMIC AUTH LINK CONTAINER - MOBILE -->
+            <div id="auth-mobile-link-container">
+                <!-- Content injected by JavaScript -->
+            </div>
+        </div>
+    </nav>
+
+    <main class="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8">
+        <!-- 2. Hero Section -->
+        <section class="text-center py-20 mb-16 rounded-xl border-4 border-gray-800 bg-gray-900/80 shadow-2xl shadow-indigo-600/20">
+            <h1 class="text-5xl sm:text-7xl font-extrabold tracking-tighter text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-indigo-400 mb-4">
+                THE NEXT LEVEL OF FUN
+            </h1>
+            <p class="text-xl sm:text-2xl text-gray-400 mb-8 max-w-3xl mx-auto">
+                Discover, play, and compete in our collection of retro-inspired and modern web games. Ready to challenge the leaderboards?
+            </p>
+            <a href="#featured" class="inline-block px-12 py-4 bg-indigo-600 rounded-full text-lg font-bold uppercase tracking-widest neon-button border-2 border-cyan-500">
+                Start Playing Now
+            </a>
+        </section>
+
+        <!-- 3. Featured Games Section -->
+        <section id="featured" class="pt-12">
+            <h2 class="text-4xl font-bold text-center mb-10 text-cyan-400">Featured Arcade Hits</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+
+                <!-- Game Card 1: Snake Clone -->
+                <div class="game-card bg-gray-800 p-6 rounded-xl border-2 border-gray-700 shadow-xl transition duration-300 cursor-pointer hover:shadow-cyan-500/50">
+                    <div class="h-32 bg-cyan-900 rounded-lg mb-4 flex items-center justify-center">
+                        <span class="text-4xl text-cyan-300">🐍</span>
+                    </div>
+                    <h3 class="text-2xl font-semibold mb-2 text-white">Classic Snake</h3>
+                    <p class="text-gray-400 mb-4">Classic high-score challenge. Grow your serpent and avoid the walls.</p>
+                    <a href="windowed-snake.html" class="text-indigo-400 hover:text-indigo-300 font-medium">PLAY GAME &rarr;</a>
+                </div>
+
+                <!-- Game Card 2: Tower Defense Placeholder -->
+                <div class="game-card bg-gray-800 p-6 rounded-xl border-2 border-gray-700 shadow-xl transition duration-300 cursor-pointer hover:shadow-indigo-500/50">
+                    <div class="h-32 bg-indigo-900 rounded-lg mb-4 flex items-center justify-center">
+                        <span class="text-4xl text-indigo-300">🏰</span>
+                    </div>
+                    <h3 class="text-2xl font-semibold mb-2 text-white">Aether Keep</h3>
+                    <p class="text-gray-400 mb-4">A minimalist tower defense game with wave-based enemies.</p>
+                    <a href="#" class="text-indigo-400 hover:text-indigo-300 font-medium">COMING SOON &rarr;</a>
+                </div>
+
+                <!-- Game Card 3: Puzzle Placeholder -->
+                <div class="game-card bg-gray-800 p-6 rounded-xl border-2 border-gray-700 shadow-xl transition duration-300 cursor-pointer hover:shadow-pink-500/50">
+                    <div class="h-32 bg-pink-900 rounded-lg mb-4 flex items-center justify-center">
+                        <span class="text-4xl text-pink-300">🧩</span>
+                    </div>
+                    <h3 class="text-2xl font-semibold mb-2 text-white">Neon Puzzle</h3>
+                    <p class="text-gray-400 mb-4">Solve logic puzzles against the clock to earn rewards.</p>
+                    <a href="#" class="text-indigo-400 hover:text-indigo-300 font-medium">COMING SOON &rarr;</a>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- 4. Footer Section -->
+    <footer id="contact" class="bg-gray-900/90 mt-16 py-8 border-t border-gray-800">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center text-gray-500">
+            <p>&copy; 2025 Pixel Forge Gaming. All rights reserved.</p>
+            <div class="mt-2 space-x-4">
+                <a href="#" class="hover:text-cyan-400 transition duration-150">Terms</a>
+                <span class="text-gray-600">|</span>
+                <a href="#" class="hover:text-cyan-400 transition duration-150">Privacy</a>
+            </div>
+        </div>
+    </footer>
+
+    <!--
+        2. AUTH LOGIC SCRIPT (Standard script block for max compatibility)
+    -->
+    <script>
+
+        // JavaScript for mobile menu toggle (non-auth related)
+        document.getElementById('mobile-menu-toggle').addEventListener('click', function() {
+            const menu = document.getElementById('mobile-menu');
+            menu.classList.toggle('hidden');
+        });
+
+        // Global sign-out function exposed to the HTML 'onclick' handlers
+        window.handleSignOut = async function() {
+            // Check if we are in local mode first
+            if (typeof __firebase_config === 'undefined') {
+                console.warn("Local Mode: Simulating Sign Out and refreshing the page to reset mock state.");
+                location.reload(); // Simple way to reset mock state locally
+                return;
+            }
+
+            // Canvas/Production Mode
+            if (window.firebase && window.firebase.signOut && window.authInstance) {
+                try {
+                    await window.firebase.signOut(window.authInstance);
+                    console.log("User signed out successfully.");
+                } catch (error) {
+                    console.error("Sign out failed:", error);
+                }
+            } else {
+                console.error("Firebase Auth not fully initialized. Cannot sign out.");
+            }
+        }
+
+        // Function to render the UI based on auth state
+        function renderAuthUI(user) {
+            const desktopContainer = document.getElementById('auth-desktop-link-container');
+            const mobileContainer = document.getElementById('auth-mobile-link-container');
+
+            // --- Desktop UI Update ---
+            if (desktopContainer) {
+                desktopContainer.innerHTML = ''; // Clear existing content
+                if (user) {
+                    // Logged in: Show Account Icon and Dropdown
+                    const userDisplayId = user.uid ? user.uid : 'Anonymous User (Mock)';
+
+                    const iconHTML = `
+                        <div class="relative flex items-center h-16">
+                            <button id="user-menu-button-desktop"
+                                class="flex items-center justify-center w-10 h-10 rounded-full bg-cyan-600 text-white
+                                    hover:bg-cyan-500 transition duration-150 focus:outline-none focus:ring-2
+                                    focus:ring-offset-2 focus:ring-offset-gray-900 focus:ring-cyan-500 user-icon-glow"
+                                aria-expanded="false"
+                                aria-controls="user-menu-dropdown-desktop">
+                                <!-- SVG User Icon -->
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                                    <circle cx="12" cy="7" r="4"></circle>
+                                </svg>
+                            </button>
+                            <!-- Dropdown Menu -->
+                            <div id="user-menu-dropdown-desktop" class="absolute top-full right-0 mt-2 w-48 rounded-md shadow-2xl py-1 bg-gray-800 ring-1 ring-cyan-500 ring-opacity-50 z-50 origin-top-right hidden">
+                                <div class="py-1">
+                                    <span class="block px-4 py-2 text-xs font-semibold text-cyan-400 border-b border-gray-700 break-words">User ID: ${userDisplayId}</span>
+                                    <a href="#" class="block px-4 py-2 text-sm text-gray-200 dropdown-menu-item transition duration-150">My Profile</a>
+                                    <a href="#" class="block px-4 py-2 text-sm text-gray-200 dropdown-menu-item transition duration-150">Settings</a>
+                                    <a href="#" onclick="event.preventDefault(); window.handleSignOut();"
+                                    class="block px-4 py-2 text-sm text-red-400 hover:bg-red-900/50 transition duration-150 font-medium border-t border-gray-700 mt-1">Sign Out</a>
+                                </div>
+                            </div>
+                        </div>
+                    `;
+
+                    desktopContainer.innerHTML = iconHTML;
+                    // Setup click listener for the desktop dropdown
+                    const button = document.getElementById('user-menu-button-desktop');
+                    const dropdown = document.getElementById('user-menu-dropdown-desktop');
+
+                    if (button && dropdown) {
+                        button.addEventListener('click', function(event) {
+                            event.stopPropagation();
+                            dropdown.classList.toggle('hidden');
+                        });
+                        // Close menu if user clicks outside of the button and the dropdown
+                        document.addEventListener('click', function(event) {
+                            if (dropdown && !button.contains(event.target) && !dropdown.contains(event.target)) {
+                                dropdown.classList.add('hidden');
+                            }
+                        });
+                    }
+
+                } else {
+                    // Logged out: Show Login Link style
+                    desktopContainer.innerHTML = `
+                        <a href="#" class="inline-flex items-center px-1 pt-1 border-b-2 border-transparent text-sm font-medium text-gray-300 hover:border-indigo-400 hover:text-white transition duration-150">Login</a>
+                    `;
+                }
+            }
+
+            // --- Mobile UI Update ---
+            if (mobileContainer) {
+                mobileContainer.innerHTML = ''; // Clear existing content
+                if (user) {
+                    // Logged in: Show profile/settings/signout links stacked in the mobile menu
+
+                    const mobileMenuHTML = `
+                        <div class="px-3">
+                            <span class="block text-xs font-semibold text-cyan-400 border-b border-gray-700 pb-2 break-words">User ID: ${user.uid || 'Anonymous User (Mock)'}</span>
+                        </div>
+                        <a href="#" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-300 hover:bg-gray-800 hover:border-indigo-400">
+                            My Profile
+                        </a>
+                        <a href="#" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-300 hover:bg-gray-800 hover:border-indigo-400">
+                            Settings
+                        </a>
+                        <a href="#" onclick="event.preventDefault(); window.handleSignOut();"
+                        class="block pl-3 pr-4 py-2 border-l-4 border-red-500 text-base font-medium text-red-400 hover:bg-red-900/50 hover:border-red-500">
+                            Sign Out
+                        </a>
+                    `;
+                    mobileContainer.innerHTML = mobileMenuHTML;
+                } else {
+                    // Logged out: Show Login Link style
+                    mobileContainer.innerHTML = `
+                        <a href="#" class="block pl-3 pr-4 py-2 border-l-4 border-transparent text-base font-medium text-gray-300 hover:bg-gray-800 hover:border-indigo-400">Login</a>
+                    `;
+                }
+            }
+        }
+
+        async function initializeAuth() {
+            // Fallback config is only used for Canvas auth attempt, not local mock
+            const LOCAL_FALLBACK_FIREBASE_CONFIG = {
+                apiKey: "MOCK_API_KEY_LOCAL",
+                authDomain: "mock-project.firebaseapp.com",
+                projectId: "mock-project-id",
+            };
+
+            const isRunningLocally = typeof __firebase_config === 'undefined';
+            if (isRunningLocally) {
+                // --- LOCAL FALLBACK MODE: GUARANTEED UI RENDERING ---
+                console.warn("--- Local Mode Detected: Rendering Mock Authenticated UI. ---");
+                // Simulate a signed-in state immediately
+                const mockUser = {
+                    uid: 'MOCK-LOCAL-USER-ID-1234567890-TESTING',
+                    isAnonymous: true,
+                };
+                renderAuthUI(mockUser);
+                return; // EXIT, do not run production Firebase logic
+            }
+
+            // --- Canvas/Production Mode ---
+            try {
+                if (!window.firebase) {
+                    console.error("Firebase module not loaded successfully (remote script failed). Rendering logged-out UI.");
+                    renderAuthUI(null);
+                    return;
+                }
+
+                console.log("Canvas Mode Detected: Initializing Firebase...");
+                const firebaseConfig = JSON.parse(__firebase_config);
+                const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+                const { initializeApp, getAuth, onAuthStateChanged, signInWithCustomToken, signInAnonymously } = window.firebase;
+                const app = initializeApp(firebaseConfig);
+                const auth = getAuth(app);
+                window.authInstance = auth; // Store auth instance globally
+                // 1. Set up the listener first
+                onAuthStateChanged(auth, renderAuthUI);
+                // 2. Perform required sign-in if no user is currently logged in
+                if (auth.currentUser === null) {
+                    try {
+                        if (initialAuthToken) {
+                            await signInWithCustomToken(auth, initialAuthToken);
+                        } else {
+                            await signInAnonymously(auth);
+                        }
+                    } catch (error) {
+                        console.error("Initial Canvas Auth attempt failed:", error);
+                    }
+                }
+            } catch (error) {
+                console.error("Firebase initialization or execution failed in Canvas Mode:", error);
+                renderAuthUI(null); // Fallback to logged-out UI
+            }
+        }
+        // Wait for the entire DOM (including the container divs) to be ready before running auth logic
+        document.addEventListener('DOMContentLoaded', initializeAuth);
+    </script>
+</body>
+</html>

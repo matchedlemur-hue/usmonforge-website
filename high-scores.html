@@ -1,0 +1,459 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="icon" type="logo/png" href="./Images/icon-image-removebg-preview.png">
+    <title>Pixel Forge: High Score Clicker</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        :root {
+            --primary-color: #3b82f6;
+            --secondary-color: #f59e0b;
+            --background-color: #0f172a;
+            --card-bg: #1e293b;
+        }
+        body {
+            font-family: 'Press Start 2P', cursive;
+            background-color: var(--background-color);
+            color: white;
+            padding: 20px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .retro-button {
+            transition: all 0.1s;
+            box-shadow: 4px 4px 0 0 var(--secondary-color);
+        }
+        .retro-button:active {
+            box-shadow: 0 0 0 0 var(--secondary-color);
+            transform: translate(4px, 4px);
+        }
+        .card {
+            background-color: var(--card-bg);
+            border: 4px solid var(--secondary-color);
+            box-shadow: 8px 8px 0 0 rgba(245, 158, 11, 0.5);
+        }
+        .score-item:nth-child(1) .rank { color: #facc15; } /* Gold */
+        .score-item:nth-child(2) .rank { color: #94a3b8; } /* Silver */
+        .score-item:nth-child(3) .rank { color: #b45309; } /* Bronze */
+        .score-item {
+            border-bottom: 1px dashed #334155;
+        }
+    </style>
+</head>
+<body>
+
+<div id="app" class="container">
+    <header class="text-center mb-10 relative">
+        <!-- New Home Icon Button -->
+        <a href="home.html">
+          <button id="home-button" title="Reset Game" class="absolute top-0 left-0 text-white p-3 hover:text-secondary-color transition duration-200 focus:outline-none">
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+              <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+        </button>
+        </a>
+        
+        <h1 class="text-4xl sm:text-6xl text-primary-color mb-2">Usmon Forge</h1>
+        <p class="text-sm sm:text-base text-gray-400">The Ultimate Retro Gaming Hub</p>
+        <p id="auth-status" class="text-xs mt-3 text-emerald-400"></p>
+    </header>
+
+    <main class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        <!-- High Score Board (Col 1) -->
+        <div class="card p-4 h-full">
+            <h2 class="text-2xl text-center mb-4 text-secondary-color">High Scores</h2>
+            <div id="high-score-board" class="space-y-1">
+                <!-- Scores will be rendered here -->
+                <p class="text-sm text-center text-gray-500">Initializing score system...</p>
+            </div>
+            <div id="user-info" class="mt-4 pt-4 border-t border-gray-700">
+                <p class="text-xs text-gray-400 leading-tight">User ID: <span id="user-id-display" class="break-all font-mono text-emerald-300"></span></p>
+            </div>
+        </div>
+
+        <!-- Game Card (Col 2) -->
+        <div id="game-card" class="card p-6 col-span-1 lg:col-span-2 flex flex-col justify-center items-center">
+            <h2 class="text-3xl text-primary-color mb-6 text-center">Pixel Clicker</h2>
+            
+            <div class="text-center mb-8">
+                <p class="text-lg text-gray-300">Score:</p>
+                <p id="score-display" class="text-6xl font-extrabold text-white">0</p>
+            </div>
+
+            <!-- Click Target -->
+            <button id="click-target" class="retro-button bg-primary-color hover:bg-blue-600 text-white font-bold py-6 px-12 rounded-lg text-xl transition-transform duration-100 ease-out active:scale-95">
+                CLICK ME!
+            </button>
+            
+            <!-- Game Messages/Modal -->
+            <div id="message-box" class="fixed inset-0 bg-black bg-opacity-75 hidden items-center justify-center p-4 z-10">
+                <div class="card p-8 text-center max-w-sm w-full">
+                    <h3 class="text-3xl text-red-500 mb-4">GAME OVER!</h3>
+                    <p class="text-xl text-gray-300 mb-6">Final Score: <span id="final-score" class="text-yellow-400">0</span></p>
+                    
+                    <button id="new-game-button" class="retro-button bg-secondary-color hover:bg-yellow-600 text-black font-bold py-3 px-6 rounded-lg text-lg w-full mb-4">
+                        New Game
+                    </button>
+                    <button id="view-scores-button" class="retro-button bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-6 rounded-lg text-lg w-full">
+                        View Scores
+                    </button>
+                </div>
+            </div>
+        </div>
+    </main>
+</div>
+
+<!-- Firebase SDKs -->
+<script type="module">
+    // --- Firebase Imports ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+    import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged, setPersistence, browserSessionPersistence } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
+    import { getFirestore, doc, setDoc, addDoc, onSnapshot, collection, query, orderBy, limit, serverTimestamp, getDocs, where, getDoc, runTransaction } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+    import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+
+    // Set Firestore log level for debugging
+    setLogLevel('Debug');
+
+    // --- Global Variables (Provided by Canvas Environment) ---
+    const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+    const firebaseConfig = JSON.parse(typeof __firebase_config !== 'undefined' ? __firebase_config : '{}');
+    const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+    // --- Firebase/DB State ---
+    let app, db, auth;
+    let userId = null;
+    let isAuthReady = false;
+    let isFirebaseAvailable = false; 
+    let isLocalMode = false;
+    
+    // Constants
+    const HIGH_SCORE_COLLECTION = `artifacts/${appId}/public/data/high_scores`;
+    const LOCAL_STORAGE_KEY = 'pixelForgeLocalScores';
+
+    // Game State
+    let score = 0;
+    let timer = 30; // 30 second game
+    let gameInterval;
+    let isGameRunning = false;
+
+    // DOM Elements
+    const scoreDisplay = document.getElementById('score-display');
+    const clickTarget = document.getElementById('click-target');
+    const authStatus = document.getElementById('auth-status');
+    const userIdDisplay = document.getElementById('user-id-display');
+    const messageBox = document.getElementById('message-box');
+    const finalScoreDisplay = document.getElementById('final-score');
+    const newGameButton = document.getElementById('new-game-button');
+    const viewScoresButton = document.getElementById('view-scores-button'); 
+    const highScoreBoard = document.getElementById('high-score-board');
+    // New Element for Home Button
+    const homeButton = document.getElementById('home-button'); 
+
+    // --- Local Storage Mock Database Functions ---
+
+    const getLocalScores = () => {
+        try {
+            const data = localStorage.getItem(LOCAL_STORAGE_KEY);
+            return data ? JSON.parse(data) : [];
+        } catch (e) {
+            console.error("Error reading from local storage:", e);
+            return [];
+        }
+    };
+
+    const saveLocalScore = (finalScore) => {
+        if (finalScore === 0) return;
+
+        let scores = getLocalScores();
+        
+        // Add new score (simulate database structure for easy rendering)
+        scores.push({
+            id: crypto.randomUUID(), // unique ID for sorting stability
+            score: finalScore,
+            userId: 'LOCAL_USER',
+            timestampMs: Date.now(),
+            isCurrentUser: true // Highlight local scores
+        });
+
+        // Keep only the top 50 scores, sorted client-side
+        scores.sort((a, b) => b.score - a.score);
+        scores = scores.slice(0, 50);
+
+        try {
+            localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(scores));
+            console.log("Score successfully saved to Local Storage:", finalScore);
+            renderHighScores(scores.slice(0, 10)); // Re-render local scores immediately
+        } catch (e) {
+            console.error("Error writing to local storage:", e);
+        }
+    };
+
+    const listenForLocalScores = () => {
+        const scores = getLocalScores();
+        // Sort by score desc
+        scores.sort((a, b) => b.score - a.score);
+        renderHighScores(scores.slice(0, 10));
+    };
+
+
+    // --- Firebase Auth & Setup ---
+    const initializeFirebase = async () => {
+        try {
+            // CRITICAL CHECK: If firebaseConfig is empty, switch to local mode.
+            if (Object.keys(firebaseConfig).length === 0) {
+                isLocalMode = true;
+                authStatus.textContent = 'Status: Local Mode (Scores saved to browser)';
+                userIdDisplay.textContent = 'LOCAL_USER';
+                isAuthReady = true; 
+                isFirebaseAvailable = false;
+                console.warn("Firebase config missing. Switching to Local Storage Mode.");
+                listenForLocalScores(); // Load local scores right away
+                return;
+            }
+
+            // Firebase config is present, proceed with cloud initialization
+            isFirebaseAvailable = true;
+            app = initializeApp(firebaseConfig);
+            db = getFirestore(app);
+            auth = getAuth(app);
+
+            // Set session persistence to maintain auth state across page refreshes
+            await setPersistence(auth, browserSessionPersistence);
+            
+            // Listen for auth state changes
+            onAuthStateChanged(auth, async (user) => {
+                if (user) {
+                    userId = user.uid;
+                    authStatus.textContent = 'Status: Cloud Mode (Authenticated)';
+                    userIdDisplay.textContent = userId;
+                    isAuthReady = true;
+                    console.log("Authentication complete. User ID:", userId);
+                    // Start listening to Firestore data once authenticated
+                    listenForHighScores();
+                } else {
+                    userId = null;
+                    authStatus.textContent = 'Status: Cloud Mode (Signing in...)';
+                    userIdDisplay.textContent = 'N/A';
+                    isAuthReady = false;
+                    console.log("Waiting for authentication...");
+                }
+            });
+
+            // Attempt to sign in with the custom token or anonymously
+            if (initialAuthToken) {
+                await signInWithCustomToken(auth, initialAuthToken);
+            } else {
+                await signInAnonymously(auth);
+            }
+
+        } catch (error) {
+            console.error("Firebase initialization or authentication failed:", error);
+            authStatus.textContent = `Error: Cloud Mode Failed (${error.code})`;
+            highScoreBoard.innerHTML = '<p class="text-sm text-center text-red-400">Cloud database failed to connect.</p>';
+            isAuthReady = true; 
+            isFirebaseAvailable = false;
+            // If cloud fails, fallback to local storage
+            isLocalMode = true;
+            listenForLocalScores();
+        }
+    };
+
+    // --- Combined High Score Logic ---
+
+    const saveHighScore = async (finalScore) => {
+        if (finalScore === 0) return;
+        
+        if (isLocalMode) {
+            saveLocalScore(finalScore);
+            return;
+        }
+
+        // --- Firebase Logic ---
+        if (!isFirebaseAvailable || !isAuthReady || !db || !userId) {
+            console.warn("Cannot save score to Cloud: Auth not ready.");
+            return;
+        }
+
+        try {
+            await addDoc(collection(db, HIGH_SCORE_COLLECTION), {
+                score: finalScore,
+                userId: userId,
+                timestamp: serverTimestamp(),
+            });
+            console.log("Score successfully saved to Cloud:", finalScore);
+        } catch (error) {
+            console.error("Error saving high score to Cloud:", error);
+        }
+    };
+
+    const listenForHighScores = () => {
+        if (isLocalMode) {
+            listenForLocalScores();
+            return;
+        }
+
+        // --- Firebase Logic ---
+        if (!isFirebaseAvailable || !isAuthReady || !db) {
+            console.warn("Skipping Cloud high score listener: DB not ready.");
+            return;
+        }
+        
+        highScoreBoard.innerHTML = '<p class="text-sm text-center text-gray-500">Loading cloud scores...</p>';
+
+
+        const q = query(
+            collection(db, HIGH_SCORE_COLLECTION),
+            orderBy('score', 'desc'),
+            limit(50) 
+        );
+
+        onSnapshot(q, (snapshot) => {
+            let scores = [];
+            snapshot.forEach((doc) => {
+                const data = doc.data();
+                scores.push({
+                    id: doc.id,
+                    score: data.score,
+                    // Use a fallback timestamp if serverTimestamp hasn't resolved yet
+                    timestampMs: data.timestamp ? data.timestamp.toMillis() : Date.now(), 
+                    userId: data.userId,
+                    isCurrentUser: data.userId === userId
+                });
+            });
+            
+            // Client-Side Sort: Score Descending, then Timestamp Ascending (oldest wins ties)
+            scores.sort((a, b) => {
+                if (b.score !== a.score) {
+                    return b.score - a.score;
+                }
+                return a.timestampMs - b.timestampMs;
+            });
+
+            const topScores = scores.slice(0, 10);
+
+            renderHighScores(topScores);
+        }, (error) => {
+            console.error("Error listening to cloud high scores:", error);
+            highScoreBoard.innerHTML = `<p class="text-red-400 text-sm text-center">Failed to load cloud scores.</p>`;
+        });
+    };
+
+    const renderHighScores = (scores) => {
+        if (scores.length === 0) {
+            highScoreBoard.innerHTML = `<p class="text-sm text-center text-gray-500">Be the first to post a score!</p>`;
+            return;
+        }
+
+        highScoreBoard.innerHTML = scores.map((s, index) => {
+            // Check if user is LOCAL_USER or the authenticated userId
+            const isUserMatch = isLocalMode ? s.userId === 'LOCAL_USER' : s.isCurrentUser;
+            
+            const isUserClass = isUserMatch ? 'bg-indigo-700/50 border-l-4 border-indigo-400' : 'hover:bg-card-bg/50';
+            const userText = isUserMatch ? 'YOU' : (s.userId && s.userId.length > 8 ? s.userId.substring(0, 8) + '...' : s.userId); 
+            const rankText = index + 1;
+
+            return `
+                <div class="score-item flex justify-between items-center p-2 rounded-md ${isUserClass}">
+                    <span class="rank w-8 text-left">${rankText}.</span>
+                    <span class="text-xs font-mono flex-1 break-all mr-2" title="Full User ID: ${s.userId}">${userText}</span>
+                    <span class="text-xl font-bold text-yellow-300">${s.score}</span>
+                </div>
+            `;
+        }).join('');
+    };
+
+
+    // --- Game Logic ---
+
+    const updateScore = () => {
+        scoreDisplay.textContent = score;
+    };
+
+    const handleClick = () => {
+        if (!isGameRunning) {
+            startGame();
+        }
+        score++;
+        updateScore();
+    };
+    
+    const updateTimerDisplay = () => {
+        clickTarget.textContent = `Time: ${timer}s`;
+        if(timer === 0) {
+            endGame();
+        }
+    }
+
+    const hideMessageBox = () => {
+        messageBox.classList.add('hidden');
+        messageBox.classList.remove('flex');
+    };
+
+    const startGame = () => {
+        score = 0;
+        timer = 30;
+        isGameRunning = true;
+        clickTarget.disabled = false;
+        clickTarget.textContent = "Time: 30s";
+        updateScore();
+        hideMessageBox(); // Hide message box on start
+
+        // Clear any existing interval
+        if (gameInterval) {
+            clearInterval(gameInterval);
+        }
+
+        gameInterval = setInterval(() => {
+            timer--;
+            updateTimerDisplay();
+        }, 1000);
+    };
+
+    const endGame = () => {
+        isGameRunning = false;
+        clearInterval(gameInterval);
+        clickTarget.disabled = true;
+        clickTarget.textContent = "Click to Start!";
+        
+        // Show Game Over Modal
+        finalScoreDisplay.textContent = score;
+        messageBox.classList.add('flex');
+        messageBox.classList.remove('hidden');
+
+        // Save score (handles both local and cloud saving)
+        saveHighScore(score);
+    };
+
+    // --- Event Listeners ---
+    clickTarget.addEventListener('click', handleClick);
+    
+    // 1. New Game - Starts a new game
+    newGameButton.addEventListener('click', () => {
+        startGame(); 
+    });
+
+    // 2. View Scores - Hides the modal without restarting
+    viewScoresButton.addEventListener('click', () => {
+        hideMessageBox();
+    });
+
+    // 3. Home Button - Resets the game state
+    homeButton.addEventListener('click', () => {
+        startGame();
+    });
+
+    // --- Initial Setup ---
+    initializeFirebase();
+
+    // Start the game in 'ready' state initially
+    clickTarget.textContent = "Click to Start!";
+
+</script>
+</body>
+</html>
