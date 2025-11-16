@@ -1,0 +1,989 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether Keep: Advanced Tower Defense</title>
+    <!-- Load Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Use Inter font -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap" rel="stylesheet">
+    
+    <style>
+        /* Custom global styles */
+        body {
+            background-color: #0d1117; /* Dark background */
+            font-family: 'Inter', sans-serif;
+            color: #e5e7eb;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        /* Canvas styling - make it glow */
+        #gameCanvas {
+            border: 3px solid #00c6ff; /* Neon blue border */
+            box-shadow: 0 0 15px rgba(0, 198, 255, 0.7);
+            background-color: #161b22; /* Slightly darker than body */
+            display: block;
+            touch-action: none; /* Prevents mobile scrolling */
+        }
+
+        /* Button styling with glow */
+        .game-button {
+            transition: all 0.2s ease;
+            box-shadow: 0 0 5px rgba(100, 116, 139, 0.5);
+        }
+        .game-button:hover {
+            box-shadow: 0 0 10px #38bdf8, 0 0 20px #38bdf8; /* Sky blue glow */
+            transform: translateY(-1px);
+        }
+        .game-button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            box-shadow: none;
+            transform: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="flex flex-col lg:flex-row max-w-6xl w-full gap-8 p-6 rounded-2xl bg-gray-800/90 backdrop-blur-sm shadow-2xl shadow-cyan-900/50">
+        
+        <!-- Game Stats and Controls Panel -->
+        <div class="lg:w-1/3 p-4 bg-gray-900 rounded-xl shadow-inner shadow-gray-700/50 order-2 lg:order-1">
+            <h1 class="text-3xl font-extrabold text-cyan-400 mb-4 border-b pb-2 border-gray-700">Aether Keep Defense</h1>
+            <p class="text-gray-400 mb-6 text-sm">Defend the **Castle Keep** against the digital swarm. Select a tower below, then click an empty grid square adjacent to the path to place it.</p>
+            
+            <!-- Game Stats -->
+            <div class="space-y-3 mb-6">
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-lg text-red-400">Keep Health (❤️):</span>
+                    <span id="health-display" class="text-xl font-mono">10</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-lg text-yellow-400">Aether Gold ($):</span>
+                    <span id="gold-display" class="text-xl font-mono">200</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-lg text-indigo-400">Current Wave:</span>
+                    <span id="wave-display" class="text-xl font-mono">0</span>
+                </div>
+                <div class="flex justify-between items-center">
+                    <span class="font-bold text-lg text-gray-400">Enemies Left:</span>
+                    <span id="enemies-left-display" class="text-xl font-mono">0</span>
+                </div>
+            </div>
+
+            <!-- Tower Purchase -->
+            <h2 class="text-xl font-semibold text-white mb-3 pt-3 border-t border-gray-700">Place Towers</h2>
+            <div class="space-y-4 mb-6">
+                
+                <button id="buy-standard-button" class="game-button w-full px-4 py-3 bg-cyan-600 rounded-lg text-white font-bold hover:bg-cyan-500 flex justify-between items-center" data-type="Standard">
+                    <span>Standard Turret</span>
+                    <span>(100$)</span>
+                </button>
+                
+                <button id="buy-heavy-button" class="game-button w-full px-4 py-3 bg-orange-600 rounded-lg text-white font-bold hover:bg-orange-500 flex justify-between items-center" data-type="Heavy">
+                    <span>Heavy Cannon</span>
+                    <span>(250$)</span>
+                </button>
+                
+                <button id="buy-tesla-button" class="game-button w-full px-4 py-3 bg-fuchsia-600 rounded-lg text-white font-bold hover:bg-fuchsia-500 flex justify-between items-center" data-type="Tesla">
+                    <span>Tesla Coil (Chain)</span>
+                    <span>(400$)</span>
+                </button>
+            </div>
+            
+            <!-- Tower Selection/Upgrade Panel -->
+            <div id="selected-tower-panel" class="mt-6 p-4 bg-gray-700/50 rounded-lg border border-gray-600 hidden">
+                <h3 class="text-xl font-bold text-yellow-300 mb-2" id="selected-tower-name">Tower Name</h3>
+                <p class="text-sm mb-1" id="selected-tower-stats"></p>
+                <button id="upgrade-button" class="game-button w-full mt-3 px-4 py-2 bg-green-600 rounded-lg text-white font-bold hover:bg-green-500">
+                    Upgrade (XXX$)
+                </button>
+            </div>
+
+            <!-- Wave Control -->
+            <button id="next-wave-button" class="game-button w-full px-6 py-3 mt-4 mb-4 bg-indigo-600 rounded-lg text-white font-bold text-lg hover:bg-indigo-500">
+                Start Next Wave
+            </button>
+
+
+            <!-- Game Messages/Modal -->
+            <div id="message-box" class="mt-6 p-4 bg-yellow-900/50 border border-yellow-500 rounded-lg text-yellow-300 hidden">
+                Game Message Area
+            </div>
+            
+        </div>
+
+        <!-- Canvas Container -->
+        <div class="lg:w-2/3 flex justify-center items-center order-1 lg:order-2">
+            <canvas id="gameCanvas" width="600" height="600"></canvas>
+        </div>
+        
+    </div>
+
+    <!-- Script Section -->
+    <script>
+        // --- Game Setup Constants ---
+        const TILE_SIZE = 40; // 40x40 pixels per grid cell
+        const GRID_SIZE = 15; // 15x15 grid (600px / 40px)
+        const CANVAS_WIDTH = TILE_SIZE * GRID_SIZE;
+        const CANVAS_HEIGHT = TILE_SIZE * GRID_SIZE;
+
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        // Match canvas dimensions to constants
+        canvas.width = CANVAS_WIDTH;
+        canvas.height = CANVAS_HEIGHT;
+
+        // --- UI Elements ---
+        const healthDisplay = document.getElementById('health-display');
+        const goldDisplay = document.getElementById('gold-display');
+        const waveDisplay = document.getElementById('wave-display');
+        const enemiesLeftDisplay = document.getElementById('enemies-left-display');
+        const nextWaveButton = document.getElementById('next-wave-button');
+        const buyStandardButton = document.getElementById('buy-standard-button');
+        const buyHeavyButton = document.getElementById('buy-heavy-button');
+        const buyTeslaButton = document.getElementById('buy-tesla-button');
+        const messageBox = document.getElementById('message-box');
+        const selectedTowerPanel = document.getElementById('selected-tower-panel');
+        const selectedTowerName = document.getElementById('selected-tower-name');
+        const selectedTowerStats = document.getElementById('selected-tower-stats');
+        const upgradeButton = document.getElementById('upgrade-button');
+
+
+        // --- Tower Definitions (Now multilevel) ---
+        const TOWER_SPECS = {
+            Standard: [
+                { cost: 100, range: 3 * TILE_SIZE, damage: 10, attackSpeed: 1.0, color: '#00c6ff', name: 'Standard Turret Lvl 1', upgradeCost: 150 },
+                { cost: 150, range: 4 * TILE_SIZE, damage: 18, attackSpeed: 1.2, color: '#38bdf8', name: 'Standard Turret Lvl 2', upgradeCost: 250 },
+                { cost: 250, range: 5 * TILE_SIZE, damage: 30, attackSpeed: 1.5, color: '#7dd3fc', name: 'Standard Turret Lvl 3', upgradeCost: null }
+            ],
+            Heavy: [
+                { cost: 250, range: 4 * TILE_SIZE, damage: 40, attackSpeed: 0.5, color: '#ff9900', name: 'Heavy Cannon Lvl 1', upgradeCost: 350 },
+                { cost: 350, range: 4.5 * TILE_SIZE, damage: 70, attackSpeed: 0.6, color: '#fb923c', name: 'Heavy Cannon Lvl 2', upgradeCost: 500 },
+                { cost: 500, range: 5 * TILE_SIZE, damage: 120, attackSpeed: 0.7, color: '#fdbd7a', name: 'Heavy Cannon Lvl 3', upgradeCost: null }
+            ],
+            Tesla: [
+                { cost: 400, range: 3.5 * TILE_SIZE, damage: 5, attackSpeed: 0.7, color: '#8b5cf6', name: 'Tesla Coil Lvl 1', chainTargets: 3, chainRange: 1.5 * TILE_SIZE, upgradeCost: 600 },
+                { cost: 600, range: 4 * TILE_SIZE, damage: 8, attackSpeed: 0.8, color: '#c084fc', name: 'Tesla Coil Lvl 2', chainTargets: 5, chainRange: 2 * TILE_SIZE, upgradeCost: 900 },
+                { cost: 900, range: 4.5 * TILE_SIZE, damage: 12, attackSpeed: 1.0, color: '#e9d5ff', name: 'Tesla Coil Lvl 3', chainTargets: 7, chainRange: 2.5 * TILE_SIZE, upgradeCost: null }
+            ]
+        };
+        // Convenience map for initial purchase costs
+        const INITIAL_COSTS = {
+            Standard: TOWER_SPECS.Standard[0].cost,
+            Heavy: TOWER_SPECS.Heavy[0].cost,
+            Tesla: TOWER_SPECS.Tesla[0].cost
+        };
+
+        // --- Game State ---
+        let game = {
+            health: 20,
+            gold: 400, // Starting gold increased for Tesla and upgrades
+            wave: 0,
+            enemies: [],
+            towers: [],
+            isPlacingTower: null, // Holds { type: string, mouseX: number, mouseY: number }
+            selectedTower: null, // Holds the selected Tower object
+            gameOver: false,
+        };
+
+        // Define the enemy path (coordinates are in grid tiles [x, y])
+        const gamePath = [
+            [0, 7],   // Start
+            [4, 7],
+            [4, 4],
+            [10, 4],
+            [10, 10],
+            [2, 10],
+            [2, 13],
+            [14, 13], // Keep Location (Tile 14, 13)
+        ];
+        
+        const KEEP_TILE_X = gamePath[gamePath.length - 1][0];
+        const KEEP_TILE_Y = gamePath[gamePath.length - 1][1];
+
+        // --- Game Classes ---
+
+        class Enemy {
+            constructor(wave) {
+                this.maxHealth = 20 + wave * 5;
+                this.health = this.maxHealth;
+                this.speed = 1 + wave * 0.1; // Tiles per second
+                this.color = '#ff6b6b'; // Red
+                this.size = 12; // Square size
+                this.pathIndex = 0;
+                // Start position (use the first point in the path)
+                this.x = gamePath[0][0] * TILE_SIZE + TILE_SIZE / 2;
+                this.y = gamePath[0][1] * TILE_SIZE + TILE_SIZE / 2;
+            }
+
+            update(deltaTime) {
+                if (this.pathIndex >= gamePath.length - 1) {
+                    game.health -= 1;
+                    return true; // Mark for removal
+                }
+
+                const targetX = gamePath[this.pathIndex + 1][0] * TILE_SIZE + TILE_SIZE / 2;
+                const targetY = gamePath[this.pathIndex + 1][1] * TILE_SIZE + TILE_SIZE / 2;
+
+                const dx = targetX - this.x;
+                const dy = targetY - this.y;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+
+                const movement = this.speed * deltaTime * TILE_SIZE;
+
+                if (distance <= movement) {
+                    this.x = targetX;
+                    this.y = targetY;
+                    this.pathIndex++;
+                    return false;
+                } else {
+                    this.x += (dx / distance) * movement;
+                    this.y += (dy / distance) * movement;
+                    return false;
+                }
+            }
+
+            draw() {
+                // Draw Soldier (Square)
+                ctx.fillStyle = this.color;
+                ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+                
+                // Add a small helmet effect
+                ctx.fillStyle = '#444'; 
+                ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size / 4);
+
+                // Draw Health Bar
+                const healthBarWidth = TILE_SIZE * 0.8;
+                const healthBarHeight = 3;
+                const healthRatio = this.health / this.maxHealth;
+
+                ctx.fillStyle = '#222'; // Background
+                ctx.fillRect(this.x - healthBarWidth / 2, this.y - this.size - healthBarHeight, healthBarWidth, healthBarHeight);
+                
+                ctx.fillStyle = healthRatio > 0.3 ? '#4CAF50' : '#FF0000'; // Green/Red
+                ctx.fillRect(this.x - healthBarWidth / 2, this.y - this.size - healthBarHeight, healthBarWidth * healthRatio, healthBarHeight);
+            }
+
+            takeDamage(damage) {
+                this.health -= damage;
+                if (this.health <= 0) {
+                    game.gold += 10; // Reward gold
+                    return true; // Died
+                }
+                return false;
+            }
+        }
+
+        class Tower {
+            constructor(x, y, specKey) {
+                this.type = specKey;
+                this.level = 1;
+                this.gridX = x;
+                this.gridY = y;
+                this.x = x * TILE_SIZE + TILE_SIZE / 2;
+                this.y = y * TILE_SIZE + TILE_SIZE / 2;
+                
+                this.updateStats(); // Initialize stats
+                
+                this.lastShotTime = 0;
+                this.target = null;
+            }
+
+            updateStats() {
+                const spec = TOWER_SPECS[this.type][this.level - 1];
+                this.range = spec.range;
+                this.damage = spec.damage;
+                this.attackSpeed = spec.attackSpeed;
+                this.color = spec.color;
+                this.name = spec.name;
+                this.upgradeCost = spec.upgradeCost;
+                
+                this.chainTargets = spec.chainTargets || 0;
+                this.chainRange = spec.chainRange || 0;
+
+                this.fireRate = 1 / this.attackSpeed;
+            }
+
+            upgrade() {
+                if (this.level < TOWER_SPECS[this.type].length) {
+                    const cost = this.upgradeCost;
+                    if (game.gold >= cost) {
+                        game.gold -= cost;
+                        this.level++;
+                        this.updateStats();
+                        showMessage(`${this.name} upgraded to Level ${this.level}!`, 2000);
+                        return true;
+                    } else {
+                        showMessage(`Need ${cost}$ to upgrade to Level ${this.level + 1}.`, 2000, 'error');
+                        return false;
+                    }
+                }
+                return false;
+            }
+
+
+            update(deltaTime) {
+                this.lastShotTime += deltaTime;
+
+                if (this.target && this.target.health <= 0) {
+                    this.target = null; // Target died
+                }
+
+                // 1. Target Acquisition (Closest enemy in range)
+                if (!this.target) {
+                    let closestDistanceSq = this.range * this.range;
+                    let bestTarget = null;
+                    
+                    for (const enemy of game.enemies) {
+                        const dx = enemy.x - this.x;
+                        const dy = enemy.y - this.y;
+                        const distanceSq = dx * dx + dy * dy;
+
+                        if (distanceSq <= closestDistanceSq) {
+                            closestDistanceSq = distanceSq;
+                            bestTarget = enemy;
+                        }
+                    }
+                    this.target = bestTarget;
+                }
+
+                // 2. Attack
+                if (this.target && this.lastShotTime >= this.fireRate) {
+                    this.shoot();
+                    this.lastShotTime = 0; // Reset timer
+                }
+            }
+
+            shoot() {
+                if (!this.target) return;
+                
+                let targetsHit = [];
+                let primaryTarget = this.target;
+                
+                // 1. Initial hit
+                if (primaryTarget) {
+                    targetsHit.push(primaryTarget);
+                    primaryTarget.takeDamage(this.damage);
+                }
+
+                // 2. Tesla Chain Logic
+                if (this.type === 'Tesla' && this.chainTargets > 1) {
+                    let lastTarget = primaryTarget;
+
+                    for (let i = 1; i < this.chainTargets; i++) {
+                        let nextTarget = this.findChainTarget(lastTarget, targetsHit);
+
+                        if (nextTarget) {
+                            targetsHit.push(nextTarget);
+                            nextTarget.takeDamage(this.damage);
+                            this.drawShot(lastTarget.x, lastTarget.y, nextTarget.x, nextTarget.y, true);
+                            lastTarget = nextTarget;
+                        } else {
+                            break; // No more targets in range
+                        }
+                    }
+                }
+                
+                // 3. Draw primary shot
+                if (this.type !== 'Tesla') {
+                    this.drawShot(this.x, this.y, this.target.x, this.target.y, false);
+                } else if (targetsHit.length > 0) {
+                     // Draw primary Tesla shot from tower to first target
+                    this.drawShot(this.x, this.y, targetsHit[0].x, targetsHit[0].y, true);
+                }
+
+                // 4. Cleanup dead enemies and target
+                let targetDied = false;
+                game.enemies = game.enemies.filter(e => {
+                    if (targetsHit.includes(e) && e.health <= 0) {
+                        if (e === this.target) targetDied = true;
+                        return false;
+                    }
+                    return true;
+                });
+
+                if (targetDied) {
+                    this.target = null;
+                }
+            }
+            
+            findChainTarget(sourceEnemy, existingTargets) {
+                const chainRangeSq = this.chainRange * this.chainRange;
+                let bestTarget = null;
+                let closestDistanceSq = Infinity;
+
+                for (const enemy of game.enemies) {
+                    if (enemy.health > 0 && !existingTargets.includes(enemy)) {
+                        const dx = enemy.x - sourceEnemy.x;
+                        const dy = enemy.y - sourceEnemy.y;
+                        const distanceSq = dx * dx + dy * dy;
+
+                        if (distanceSq <= chainRangeSq && distanceSq < closestDistanceSq) {
+                            closestDistanceSq = distanceSq;
+                            bestTarget = enemy;
+                        }
+                    }
+                }
+                return bestTarget;
+            }
+
+            drawShot(startX, startY, endX, endY, isTesla) {
+                ctx.save();
+                if (isTesla) {
+                    // Lightning effect for Tesla
+                    ctx.strokeStyle = 'cyan';
+                    ctx.lineWidth = 3;
+                    ctx.globalAlpha = 0.8;
+                    ctx.shadowColor = 'cyan';
+                    ctx.shadowBlur = 5;
+                    // Draw zigzag lightning path (simplified)
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    
+                    const midX = (startX + endX) / 2 + (Math.random() - 0.5) * 10;
+                    const midY = (startY + endY) / 2 + (Math.random() - 0.5) * 10;
+                    ctx.lineTo(midX, midY);
+                    
+                    ctx.lineTo(endX, endY);
+                } else {
+                    // Standard/Heavy laser
+                    ctx.strokeStyle = this.type === 'Heavy' ? '#ff3300' : '#ffbb00';
+                    ctx.lineWidth = this.type === 'Heavy' ? 4 : 2; 
+                    ctx.shadowColor = ctx.strokeStyle;
+                    ctx.shadowBlur = 4;
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                }
+                ctx.stroke();
+                ctx.restore();
+            }
+
+            draw() {
+                // Determine if this tower is currently selected
+                const isSelected = game.selectedTower === this;
+
+                // Draw Base
+                ctx.save();
+                ctx.fillStyle = this.color;
+                ctx.strokeStyle = isSelected ? '#fff' : '#444';
+                ctx.lineWidth = isSelected ? 4 : 2;
+                
+                // Tesla uses a circle base for a different look
+                if (this.type === 'Tesla') {
+                    ctx.beginPath();
+                    ctx.arc(this.x, this.y, TILE_SIZE / 3, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.stroke();
+                } else {
+                    // Standard/Heavy uses a square base
+                    ctx.fillRect(this.x - TILE_SIZE / 4, this.y - TILE_SIZE / 4, TILE_SIZE / 2, TILE_SIZE / 2);
+                    ctx.strokeRect(this.x - TILE_SIZE / 4, this.y - TILE_SIZE / 4, TILE_SIZE / 2, TILE_SIZE / 2);
+                }
+
+                // Draw Level indicator
+                ctx.fillStyle = '#111';
+                ctx.font = 'bold 10px Inter';
+                ctx.textAlign = 'center';
+                ctx.fillText(`L${this.level}`, this.x, this.y + 15);
+
+                ctx.restore();
+
+
+                // Draw Barrel (pointing towards target if available) - not for Tesla
+                if (this.type !== 'Tesla') {
+                    ctx.save();
+                    ctx.fillStyle = '#444';
+                    
+                    let angle = 0;
+                    if (this.target) {
+                        angle = Math.atan2(this.target.y - this.y, this.target.x - this.x);
+                    } else {
+                        angle = Math.PI / 2; 
+                    }
+                    
+                    ctx.translate(this.x, this.y);
+                    ctx.rotate(angle);
+                    
+                    ctx.fillRect(0, -2, TILE_SIZE / 3, 4); 
+
+                    ctx.restore();
+                }
+
+                // Draw Range indicator if selected
+                if (isSelected) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.2;
+                    ctx.fillStyle = this.color;
+                    ctx.beginPath();
+                     ctx.arc(this.x, this.y, this.range, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            }
+        }
+        
+        // --- Drawing Helper Functions ---
+
+        function getTileCoordinates(x, y) {
+            return {
+                gridX: Math.floor(x / TILE_SIZE),
+                gridY: Math.floor(y / TILE_SIZE)
+            };
+        }
+        
+        function isPathTile(gridX, gridY) {
+            // Check if tile is part of the path *or* the keep tile
+            return gamePath.some(([px, py]) => px === gridX && py === gridY);
+        }
+
+        function isAdjacentToPath(gridX, gridY) {
+            // Check 4 direct neighbors (up, down, left, right)
+            const neighbors = [
+                [gridX + 1, gridY],
+                [gridX - 1, gridY],
+                [gridX, gridY + 1],
+                [gridX, gridY - 1]
+            ];
+            
+            // Return true if any neighbor is a path tile
+            return neighbors.some(([nX, nY]) => isPathTile(nX, nY));
+        }
+
+        function drawGrid() {
+            // 1. Draw Path (Connected Lines)
+            ctx.save();
+            ctx.strokeStyle = '#1d4ed8'; // Dark blue path color
+            ctx.lineWidth = TILE_SIZE * 0.8; // Thick line (80% of tile size)
+            ctx.lineCap = 'round'; // Round caps to make connections look continuous
+            ctx.shadowColor = '#00c6ff'; // Subtle glow
+            ctx.shadowBlur = 10;
+            
+            ctx.beginPath();
+            
+            const startX = gamePath[0][0] * TILE_SIZE + TILE_SIZE / 2;
+            const startY = gamePath[0][1] * TILE_SIZE + TILE_SIZE / 2;
+            ctx.moveTo(startX, startY);
+            
+            for (let i = 1; i < gamePath.length; i++) {
+                const x = gamePath[i][0] * TILE_SIZE + TILE_SIZE / 2;
+                const y = gamePath[i][1] * TILE_SIZE + TILE_SIZE / 2;
+                ctx.lineTo(x, y);
+            }
+
+            ctx.stroke();
+            ctx.restore(); 
+
+            // 2. Draw Grid Lines
+            ctx.strokeStyle = '#2d333b'; // Grid lines color
+            ctx.lineWidth = 1;
+            for (let i = 0; i <= GRID_SIZE; i++) {
+                // Vertical lines
+                ctx.beginPath();
+                ctx.moveTo(i * TILE_SIZE, 0);
+                ctx.lineTo(i * TILE_SIZE, CANVAS_HEIGHT);
+                ctx.stroke();
+
+                // Horizontal lines
+                ctx.beginPath();
+                ctx.moveTo(0, i * TILE_SIZE);
+                ctx.lineTo(CANVAS_WIDTH, i * TILE_SIZE);
+                ctx.stroke();
+            }
+
+            // 3. Draw Castle Keep/Goal 
+            const keepX = KEEP_TILE_X * TILE_SIZE;
+            const keepY = KEEP_TILE_Y * TILE_SIZE;
+
+            ctx.fillStyle = '#440000'; // Dark red foundation
+            ctx.fillRect(keepX, keepY, TILE_SIZE, TILE_SIZE);
+            
+            // Draw Battlements
+            ctx.fillStyle = '#660000'; 
+            const battlementHeight = TILE_SIZE / 4;
+            ctx.fillRect(keepX, keepY, TILE_SIZE, battlementHeight);
+            
+            // Draw Towers/Tops
+            ctx.fillStyle = '#990000';
+            ctx.fillRect(keepX, keepY, TILE_SIZE / 4, battlementHeight * 2);
+            ctx.fillRect(keepX + TILE_SIZE * 3 / 4, keepY, TILE_SIZE / 4, battlementHeight * 2);
+
+            // Draw health text over the Keep (FIXED VISIBILITY)
+            ctx.save();
+            ctx.fillStyle = game.health > 3 ? '#fff' : '#ff0000'; 
+            ctx.font = 'bolder 24px Inter'; // Even larger font
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+
+            // Add text shadow for better readability
+            ctx.shadowColor = '#000000';
+            ctx.shadowBlur = 4;
+            ctx.lineWidth = 1; 
+
+            // Draw the text
+            ctx.fillText(`KEEP: ${game.health}`, keepX + TILE_SIZE / 2, keepY + TILE_SIZE / 2);
+            ctx.restore();
+        }
+
+        function drawPlacementMode(mouseX, mouseY) {
+            if (!game.isPlacingTower || !game.isPlacingTower.type) return;
+
+            const { gridX, gridY } = getTileCoordinates(mouseX, mouseY);
+            const type = game.isPlacingTower.type;
+            const spec = TOWER_SPECS[type][0]; // Use level 1 specs for placement info
+            
+            const isOccupied = game.towers.some(t => t.gridX === gridX && t.gridY === gridY);
+            const isOnPath = isPathTile(gridX, gridY);
+            const isNearPath = isAdjacentToPath(gridX, gridY);
+
+            const isValidPlacement = (
+                gridX >= 0 && gridX < GRID_SIZE && 
+                gridY >= 0 && gridY < GRID_SIZE && 
+                !isOnPath && 
+                isNearPath && 
+                !isOccupied
+            );
+            
+            const color = isValidPlacement ? 'rgba(0, 255, 0, 0.2)' : 'rgba(255, 0, 0, 0.2)';
+            
+            // Draw hover square
+            ctx.fillStyle = color;
+            ctx.fillRect(gridX * TILE_SIZE, gridY * TILE_SIZE, TILE_SIZE, TILE_SIZE);
+
+            // Draw Range indicator
+            ctx.save();
+            ctx.globalAlpha = 0.15;
+            ctx.fillStyle = spec.color;
+            ctx.beginPath();
+            ctx.arc(gridX * TILE_SIZE + TILE_SIZE / 2, gridY * TILE_SIZE + TILE_SIZE / 2, spec.range, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+        }
+
+        function updateUI() {
+            healthDisplay.textContent = game.health;
+            goldDisplay.textContent = game.gold;
+            waveDisplay.textContent = game.wave;
+            enemiesLeftDisplay.textContent = game.enemies.length;
+            
+            // Update Buy Buttons
+            buyStandardButton.disabled = game.gold < INITIAL_COSTS.Standard || game.gameOver;
+            buyHeavyButton.disabled = game.gold < INITIAL_COSTS.Heavy || game.gameOver;
+            buyTeslaButton.disabled = game.gold < INITIAL_COSTS.Tesla || game.gameOver;
+
+            nextWaveButton.disabled = game.enemies.length > 0 || game.gameOver;
+            
+            // Update placement mode button visuals (omitted for brevity, assume base CSS handles it)
+
+            if (game.health <= 0) {
+                endGame(false);
+            }
+            
+            // Update Selected Tower Panel
+            if (game.selectedTower) {
+                selectedTowerPanel.classList.remove('hidden');
+                selectedTowerName.textContent = game.selectedTower.name;
+                
+                let statsText = `Level: ${game.selectedTower.level} / 3\n`;
+                statsText += `Damage: ${game.selectedTower.damage}\n`;
+                statsText += `Range: ${Math.round(game.selectedTower.range / TILE_SIZE)} tiles\n`;
+                statsText += `Rate: ${game.selectedTower.attackSpeed.toFixed(1)} shots/s`;
+
+                if (game.selectedTower.type === 'Tesla') {
+                    statsText += `\nChain Targets: ${game.selectedTower.chainTargets}`;
+                }
+                
+                selectedTowerStats.innerHTML = statsText.replace(/\n/g, '<br>');
+
+                if (game.selectedTower.upgradeCost !== null) {
+                    upgradeButton.textContent = `Upgrade (${game.selectedTower.upgradeCost}$)`;
+                    upgradeButton.disabled = game.gold < game.selectedTower.upgradeCost;
+                } else {
+                    upgradeButton.textContent = "Max Level";
+                    upgradeButton.disabled = true;
+                }
+            } else {
+                selectedTowerPanel.classList.add('hidden');
+            }
+        }
+
+        function showMessage(text, duration = 3000, type = 'info') {
+            messageBox.textContent = text;
+            messageBox.classList.remove('hidden', 'bg-red-900/50', 'border-red-500', 'text-red-300', 'bg-yellow-900/50', 'border-yellow-500', 'text-yellow-300', 'bg-green-900/50', 'border-green-500', 'text-green-300');
+            
+            if (type === 'error') {
+                messageBox.classList.add('bg-red-900/50', 'border-red-500', 'text-red-300');
+            } else if (type === 'upgrade') {
+                messageBox.classList.add('bg-green-900/50', 'border-green-500', 'text-green-300');
+            } else {
+                messageBox.classList.add('bg-yellow-900/50', 'border-yellow-500', 'text-yellow-300');
+            }
+            
+            clearTimeout(window.messageTimeout);
+            window.messageTimeout = setTimeout(() => {
+                messageBox.classList.add('hidden');
+            }, duration);
+        }
+
+        // --- Game Logic ---
+
+        function spawnWave() {
+            game.wave++;
+            showMessage(`Wave ${game.wave} incoming! Prepare for attack.`, 5000);
+            
+            const enemyCount = 5 + game.wave * 2;
+            let spawnDelay = 0;
+
+            for (let i = 0; i < enemyCount; i++) {
+                setTimeout(() => {
+                    game.enemies.push(new Enemy(game.wave));
+                }, spawnDelay);
+                spawnDelay += 800 / game.wave; 
+            }
+        }
+        
+        function placeTower(gridX, gridY, type) {
+            const spec = TOWER_SPECS[type][0];
+            if (!spec) return;
+            
+            const isOccupied = game.towers.some(t => t.gridX === gridX && t.gridY === gridY);
+            const isOnPath = isPathTile(gridX, gridY);
+            const isNearPath = isAdjacentToPath(gridX, gridY);
+
+            // Placement check: must be near path, not on path, and not occupied
+            if (isOnPath) {
+                showMessage("Cannot place towers on the path or the Keep!", 3000, 'error');
+                return;
+            }
+            if (!isNearPath) {
+                showMessage("Towers must be placed directly adjacent to the path!", 3000, 'error');
+                return;
+            }
+            if (isOccupied) {
+                // If it's already occupied, maybe the user wanted to select it?
+                const existingTower = game.towers.find(t => t.gridX === gridX && t.gridY === gridY);
+                if(existingTower) {
+                    game.selectedTower = existingTower;
+                    game.isPlacingTower = null;
+                    return;
+                }
+                showMessage("Space is already occupied!", 3000, 'error');
+                return;
+            }
+
+            if (game.gold >= spec.cost) {
+                game.towers.push(new Tower(gridX, gridY, type));
+                game.gold -= spec.cost;
+                showMessage(`${spec.name.split(' ')[0]} deployed!`, 1500, 'upgrade');
+            } else {
+                showMessage("Not enough Aether Gold!", 3000, 'error');
+            }
+            
+            game.isPlacingTower = null; // Exit placement mode
+        }
+
+        function endGame(isWin) {
+            game.gameOver = true;
+            nextWaveButton.disabled = true;
+            buyStandardButton.disabled = true;
+            buyHeavyButton.disabled = true;
+            buyTeslaButton.disabled = true;
+            game.selectedTower = null;
+            
+            const message = isWin 
+                ? "VICTORY! All waves defeated. The Keep is safe."
+                : "DEFEAT! The Castle Keep was breached. Game Over.";
+            
+            showMessage(message, 60000, isWin ? 'upgrade' : 'error');
+            
+            // Final Game Over restart button
+            nextWaveButton.textContent = isWin ? "Play Again" : "Restart Game";
+            nextWaveButton.disabled = false;
+            nextWaveButton.onclick = () => window.location.reload(); 
+        }
+
+        // --- Event Handlers ---
+        
+        function handleBuyTowerClick(type) {
+            if (game.gameOver) return;
+            
+            const cost = INITIAL_COSTS[type];
+            if (game.gold < cost) {
+                showMessage(`Not enough Aether Gold to buy ${TOWER_SPECS[type][0].name}!`, 3000, 'error');
+                return;
+            }
+            
+            // Deselect any tower when trying to place a new one
+            game.selectedTower = null;
+
+            if (game.isPlacingTower && game.isPlacingTower.type === type) {
+                // Clicking the same button cancels placement
+                game.isPlacingTower = null;
+                showMessage("Placement cancelled.", 1500);
+            } else {
+                // Start placement mode for this tower type
+                const rect = canvas.getBoundingClientRect();
+                game.isPlacingTower = { type: type, mouseX: rect.width / 2, mouseY: rect.height / 2 }; 
+                showMessage(`Placing ${TOWER_SPECS[type][0].name}. Click on a tile adjacent to the path.`, 5000);
+            }
+        }
+
+        buyStandardButton.addEventListener('click', () => handleBuyTowerClick('Standard'));
+        buyHeavyButton.addEventListener('click', () => handleBuyTowerClick('Heavy'));
+        buyTeslaButton.addEventListener('click', () => handleBuyTowerClick('Tesla'));
+        
+        upgradeButton.addEventListener('click', () => {
+            if (game.selectedTower) {
+                game.selectedTower.upgrade();
+            }
+        });
+
+        nextWaveButton.addEventListener('click', () => {
+            if (game.gameOver || game.enemies.length > 0) return;
+            spawnWave();
+        });
+        
+        canvas.addEventListener('click', (event) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = event.clientX - rect.left;
+            const clickY = event.clientY - rect.top;
+            const { gridX, gridY } = getTileCoordinates(clickX, clickY);
+
+            if (game.gameOver) return;
+
+            // 1. Placement Mode
+            if (game.isPlacingTower) {
+                placeTower(gridX, gridY, game.isPlacingTower.type);
+                return;
+            }
+
+            // 2. Selection Mode
+            const clickedTower = game.towers.find(t => t.gridX === gridX && t.gridY === gridY);
+            
+            if (clickedTower) {
+                // Select or deselect the clicked tower
+                if (game.selectedTower === clickedTower) {
+                    game.selectedTower = null;
+                } else {
+                    game.selectedTower = clickedTower;
+                }
+            } else {
+                // Clicked empty spot, deselect
+                game.selectedTower = null;
+            }
+            
+        });
+
+        canvas.addEventListener('mousemove', (event) => {
+            if (!game.isPlacingTower) return;
+
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = event.clientX - rect.left;
+            const mouseY = event.clientY - rect.top;
+            
+            game.isPlacingTower.mouseX = mouseX;
+            game.isPlacingTower.mouseY = mouseY;
+        });
+        
+        // Handle touch input for tower placement (simplified for placement only)
+        canvas.addEventListener('touchstart', (event) => {
+            event.preventDefault(); 
+            const touch = event.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const clickX = touch.clientX - rect.left;
+            const clickY = touch.clientY - rect.top;
+            const { gridX, gridY } = getTileCoordinates(clickX, clickY);
+
+            if (game.gameOver) return;
+
+            // 1. Placement Mode
+            if (game.isPlacingTower) {
+                game.isPlacingTower.mouseX = clickX;
+                game.isPlacingTower.mouseY = clickY;
+                placeTower(gridX, gridY, game.isPlacingTower.type);
+                return;
+            }
+
+            // 2. Selection Mode (for upgrades)
+            const clickedTower = game.towers.find(t => t.gridX === gridX && t.gridY === gridY);
+            if (clickedTower) {
+                if (game.selectedTower === clickedTower) {
+                    game.selectedTower = null;
+                } else {
+                    game.selectedTower = clickedTower;
+                }
+            } else {
+                game.selectedTower = null;
+            }
+        });
+        
+        // --- Game Loop ---
+        let lastTime = 0;
+        const totalWaves = 10; 
+
+        function animate(timestamp) {
+            if (game.gameOver) return;
+
+            const deltaTime = (timestamp - lastTime) / 1000; 
+            lastTime = timestamp;
+
+            // 1. Clear Canvas
+            ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+
+            // 2. Draw Static Elements (Path and Grid)
+            drawGrid();
+
+            // 3. Update & Draw Towers
+            for (const tower of game.towers) {
+                tower.update(deltaTime);
+                tower.draw();
+            }
+
+            // 4. Update & Draw Enemies
+            game.enemies = game.enemies.filter(enemy => {
+                const removed = enemy.update(deltaTime); 
+                if (removed) {
+                    return false; 
+                }
+                enemy.draw();
+                return enemy.health > 0; 
+            });
+            
+            // 5. Draw Placement Mode Overlay
+            if (game.isPlacingTower) {
+                drawPlacementMode(game.isPlacingTower.mouseX, game.isPlacingTower.mouseY);
+            }
+            
+            // 6. Check Win Condition
+            if (game.enemies.length === 0 && game.wave >= totalWaves) {
+                endGame(true);
+            }
+
+            // 7. Update UI and Health check
+            updateUI();
+            requestAnimationFrame(animate);
+        }
+
+        // Start the game loop when the window loads
+        window.onload = function() {
+            showMessage("Welcome! You can now upgrade towers. Click a tower to view its stats and upgrade.", 10000);
+            updateUI();
+            drawGrid();
+            requestAnimationFrame(animate); 
+        }
+
+        // --- Authentication/Persistence Placeholder (Required) ---
+        const appId = typeof __app_id !== 'undefined' ? __app_id : 'aether-keep-default';
+        const apiKey = "";
+        
+    </script>
+</body>
+</html>
